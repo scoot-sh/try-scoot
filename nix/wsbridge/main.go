@@ -12,17 +12,42 @@
 //   - client->server frames are masked (unmask here); server->client frames
 //     go out unmasked binary, one frame per TCP read, like websockify.
 //   - ping -> pong, close -> echoed close, continuation frames reassembled.
+//
+// Hardening (loopback-grade, hostile-input safe):
+//   - Frame payloads are capped at maxFramePayload (close 1009 on excess);
+//     reassembled messages are capped at maxMessageBytes (close 1009).
+//   - Client frames MUST be masked (RFC 6455 5.1); unmasked -> close 1002.
+//   - Sec-WebSocket-Version must be 13, else 426.
+//   - RSV1/2/3 must be zero (else close 1002); unknown opcodes -> close 1003.
+//   - Control frames must be final with payload <= 125 (else 1002).
+//   - Same-origin check on the upgrade: requests with no Origin header are
+//     allowed (non-browser clients such as scripted tests send none);
+//     requests carrying an Origin are allowed only when the origin equals
+//     the request's own Host or is a loopback spelling (localhost,
+//     127.0.0.1, ::1) at the same port. Anything else gets 403 and never
+//     reaches the handshake.
+//   - http.Server sets ReadHeaderTimeout; every hijacked connection gets a
+//     read deadline refreshed on each frame plus a server ping keepalive
+//     (browsers answer pings automatically, so an idle noVNC session stays
+//     up); writes carry a short deadline. At most maxConns proxied
+//     connections exist at once (excess gets 503).
+//   - Every spawned goroutine recovers; malformed input produces at most one
+//     short log line, never a stack trace.
 package main
 
 import (
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
+	"time"
 )
 
 var (
@@ -33,14 +58,36 @@ var (
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+const (
+	// Caps: RFB client messages are tens of bytes; noVNC never sends
+	// anything near a megabyte. Anything bigger is hostile or broken.
+	maxFramePayload = 1 << 20 // 1 MiB per frame -> close 1009
+	maxMessageBytes = 4 << 20 // 4 MiB reassembled -> close 1009
+	maxConns        = 32
+
+	readTimeout       = 90 * time.Second
+	writeTimeout      = 10 * time.Second
+	pingPeriod        = 30 * time.Second
+	readHeaderTimeout = 10 * time.Second
+)
+
+// wsSem bounds concurrent proxied WebSocket connections (Slowloris/flood).
+var wsSem = make(chan struct{}, maxConns)
+
 func main() {
 	flag.Parse()
 	if *webDir == "" {
 		log.Fatal("wsbridge: -web directory is required")
 	}
-	http.HandleFunc("/", serveWSOrFiles)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", serveWSOrFiles)
+	srv := &http.Server{
+		Addr:              *listenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
 	log.Printf("wsbridge: http+ws %s -> tcp %s (web %s)", *listenAddr, *targetAddr, *webDir)
-	log.Fatal(http.ListenAndServe(*listenAddr, nil))
+	log.Fatal(srv.ListenAndServe())
 }
 
 func serveWSOrFiles(w http.ResponseWriter, r *http.Request) {
@@ -54,15 +101,97 @@ func serveWSOrFiles(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.Dir(*webDir)).ServeHTTP(w, r)
 }
 
+// isWSUpgrade reports a real RFC 6455 upgrade request: the Connection
+// header must carry the "upgrade" token AND Upgrade must be "websocket".
+// (An earlier version wrote A || B && C, which treated
+// "Connection: Upgrade" + "Upgrade: h2c" as WebSocket.)
 func isWSUpgrade(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("Connection"), "Upgrade") ||
-		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") &&
-			strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+	if !hasToken(r.Header.Get("Connection"), "upgrade") {
+		return false
+	}
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+}
+
+func hasToken(header, token string) bool {
+	for _, part := range strings.Split(header, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return true
+		}
+	}
+	return false
+}
+
+// originAllowed enforces the same-origin policy for the upgrade.
+// Empty Origin (non-browser clients: scripted tests, websockify-style
+// tools) is allowed. The literal "null" (sandboxed file:// pages) is
+// rejected. Otherwise the origin must equal the request's own Host
+// (same host and port) or be a loopback spelling (localhost, 127.0.0.1,
+// ::1) at the same port as the request.
+func originAllowed(reqHost, origin string) bool {
+	if origin == "" {
+		return true
+	}
+	if origin == "null" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	originHost := strings.ToLower(u.Hostname())
+	originPort := u.Port()
+	if originPort == "" {
+		if u.Scheme == "https" {
+			originPort = "443"
+		} else {
+			originPort = "80"
+		}
+	}
+	reqName, reqPort := splitHostPort(reqHost)
+	reqName = strings.ToLower(reqName)
+	if reqPort == "" {
+		reqPort = "80"
+	}
+	if originHost == reqName && originPort == reqPort {
+		return true
+	}
+	if isLoopbackName(originHost) && originPort == reqPort {
+		return true
+	}
+	return false
+}
+
+func isLoopbackName(h string) bool {
+	h = strings.ToLower(strings.Trim(h, "[]"))
+	return h == "localhost" || h == "127.0.0.1" || h == "::1"
+}
+
+func splitHostPort(hostport string) (string, string) {
+	if hostport == "" {
+		return "", ""
+	}
+	if h, p, err := net.SplitHostPort(hostport); err == nil {
+		return h, p
+	}
+	// No port present (or unparseable): treat the whole thing as a name.
+	return strings.Trim(hostport, "[]"), ""
 }
 
 // proxyWS performs the server side of the RFC 6455 opening handshake, then
 // splices the connection to the TCP target in both directions.
 func proxyWS(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Sec-WebSocket-Version") != "13" {
+		w.Header().Set("Sec-WebSocket-Version", "13")
+		http.Error(w, "expected Sec-WebSocket-Version: 13", http.StatusUpgradeRequired)
+		return
+	}
+	if !originAllowed(r.Host, r.Header.Get("Origin")) {
+		http.Error(w, "foreign origin", http.StatusForbidden)
+		return
+	}
 	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
 		http.Error(w, "missing Sec-WebSocket-Key", http.StatusBadRequest)
@@ -73,6 +202,14 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(p) == "binary" {
 			proto = "binary"
 		}
+	}
+
+	select {
+	case wsSem <- struct{}{}:
+		defer func() { <-wsSem }()
+	default:
+		http.Error(w, "too many connections", http.StatusServiceUnavailable)
+		return
 	}
 
 	hj, ok := w.(http.Hijacker)
@@ -96,6 +233,7 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		hs.WriteString("Sec-WebSocket-Protocol: " + proto + "\r\n")
 	}
 	hs.WriteString("\r\n")
+	_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if _, err := io.WriteString(rw, hs.String()); err != nil {
 		conn.Close()
 		return
@@ -105,17 +243,38 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	backend, err := net.Dial("tcp", *targetAddr)
+	backend, err := net.DialTimeout("tcp", *targetAddr, 10*time.Second)
 	if err != nil {
 		// 101 already sent; report via a close frame with 1014 (bad
 		// gateway) and drop. The noVNC client surfaces this as a failed
 		// connect, same as websockify refusing the target.
+		_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 		writeFrame(conn, 0x8, []byte{0x03, 0xF6})
 		conn.Close()
 		return
 	}
-	go tcpToWS(backend, conn)
-	wsToTCP(conn, backend)
+
+	c := &wsConn{conn: conn, mu: &sync.Mutex{}}
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		tcpToWS(backend, c, done)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		pingLoop(c, done)
+	}()
+	wsToTCP(c, backend, done)
+	close(done)
+	// Unblock readers/writers so the spawned goroutines exit, then wait.
+	_ = conn.SetDeadline(time.Now())
+	_ = backend.SetDeadline(time.Now())
+	wg.Wait()
 }
 
 func wsAccept(key string) string {
@@ -124,21 +283,51 @@ func wsAccept(key string) string {
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
+// wsConn serializes all writes to the browser socket: data frames from the
+// backend, pong/close replies, and keepalive pings share it.
+type wsConn struct {
+	conn net.Conn
+	mu   *sync.Mutex
+}
+
+func (c *wsConn) writeFrame(op byte, payload []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+	return writeFrame(c.conn, op, payload)
+}
+
+func (c *wsConn) writeClose(code uint16, reason string) {
+	buf := []byte{byte(code >> 8), byte(code)}
+	buf = append(buf, reason...)
+	_ = c.writeFrame(0x8, buf)
+}
+
 // wsToTCP runs on the calling goroutine: parse client frames, forward binary
 // payloads to the backend. Returns when either side is done.
-func wsToTCP(conn net.Conn, backend net.Conn) {
-	defer conn.Close()
+func wsToTCP(c *wsConn, backend net.Conn, done chan struct{}) {
+	defer c.conn.Close()
 	defer backend.Close()
 	for {
-		op, payload, err := readMessage(conn)
+		select {
+		case <-done:
+			return
+		default:
+		}
+		_ = c.conn.SetReadDeadline(time.Now().Add(readTimeout))
+		op, payload, code, err := readMessage(c.conn)
 		if err != nil {
+			if code != 0 {
+				c.writeClose(code, "")
+			}
 			return
 		}
 		switch op {
 		case 0x8: // close: echo and stop
-			writeFrame(conn, 0x8, payload)
+			_ = c.writeFrame(0x8, payload)
 			return
 		case 0x1, 0x2: // text/binary: RFB uses binary; forward either
+			_ = backend.SetWriteDeadline(time.Now().Add(writeTimeout))
 			if _, err := backend.Write(payload); err != nil {
 				return
 			}
@@ -147,102 +336,284 @@ func wsToTCP(conn net.Conn, backend net.Conn) {
 }
 
 // tcpToWS wraps each backend read in one unmasked binary frame.
-func tcpToWS(backend net.Conn, conn net.Conn) {
+func tcpToWS(backend net.Conn, c *wsConn, done chan struct{}) {
 	defer backend.Close()
-	defer conn.Close()
+	defer c.conn.Close()
+	defer func() { _ = recover() }()
 	buf := make([]byte, 65536)
 	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
 		n, err := backend.Read(buf)
 		if n > 0 {
-			if werr := writeFrame(conn, 0x2, buf[:n]); werr != nil {
+			if werr := c.writeFrame(0x2, buf[:n]); werr != nil {
 				return
 			}
 		}
 		if err != nil {
 			// Backend closed: clean close on the WS side.
-			writeFrame(conn, 0x8, []byte{0x03, 0xE8})
+			c.writeClose(1000, "")
 			return
 		}
 	}
 }
 
-// readMessage reads one whole message, reassembling fragmented data frames
-// and answering pings inline. Returns the data opcode (0x1/0x2, or 0x8 for
-// close) and the full payload.
-func readMessage(conn net.Conn) (byte, []byte, error) {
-	var msg []byte
-	var msgOp byte
+// pingLoop keeps NATs and the read deadline honest on idle sessions.
+// Browsers answer pings at the WebSocket layer, so an open-but-quiet
+// noVNC page stays connected; a dead peer trips the read deadline.
+func pingLoop(c *wsConn, done chan struct{}) {
+	defer func() { _ = recover() }()
+	t := time.NewTicker(pingPeriod)
+	defer t.Stop()
 	for {
-		fin, op, payload, err := readFrame(conn)
-		if err != nil {
-			return 0, nil, err
-		}
-		switch op {
-		case 0x8: // close
-			return op, payload, nil
-		case 0x9: // ping: pong with same body, keep reading
-			_ = writeFrame(conn, 0xA, payload)
-		case 0xA: // pong: ignore
-		case 0x1, 0x2: // data frame starts a message
-			msgOp = op
-			msg = append(msg, payload...)
-			if fin {
-				return msgOp, msg, nil
-			}
-		case 0x0: // continuation
-			msg = append(msg, payload...)
-			if fin {
-				return msgOp, msg, nil
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			if err := c.writeFrame(0x9, nil); err != nil {
+				return
 			}
 		}
 	}
 }
 
-// readFrame parses one RFC 6455 frame. Returns final flag, opcode and
-// (unmasked) payload. Control frames are limited to 125 bytes by the
-// protocol and are always final.
-func readFrame(conn net.Conn) (bool, byte, []byte, error) {
-	var hdr [2]byte
-	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
-		return false, 0, nil, err
+var (
+	errTooLarge = errors.New("frame too large")
+	errProtocol = errors.New("protocol error")
+	errBadOp    = errors.New("unknown opcode")
+)
+
+// readMessage reads one whole message, reassembling fragmented data frames
+// and answering pings inline. Returns the data opcode (0x1/0x2, or 0x8 for
+// close), the full payload, and a close code (0 when the error is a plain
+// I/O failure that needs no close frame).
+func readMessage(conn net.Conn) (byte, []byte, uint16, error) {
+	var msg []byte
+	var msgOp byte
+	inMsg := false
+	for {
+		fin, op, payload, code, err := readFrame(conn)
+		if err != nil {
+			return 0, nil, code, err
+		}
+		switch op {
+		case 0x8: // close
+			return op, payload, 0, nil
+		case 0x9: // ping: pong with same body, keep reading
+			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			_ = writeFrame(conn, 0xA, payload)
+		case 0xA: // pong: ignore
+		case 0x1, 0x2: // data frame starts a message
+			if inMsg {
+				return 0, nil, 1002, errProtocol
+			}
+			inMsg = true
+			msgOp = op
+			if len(payload) > maxMessageBytes {
+				return 0, nil, 1009, errTooLarge
+			}
+			msg = append(msg, payload...)
+			if fin {
+				return msgOp, msg, 0, nil
+			}
+		case 0x0: // continuation
+			if !inMsg {
+				return 0, nil, 1002, errProtocol
+			}
+			if len(msg)+len(payload) > maxMessageBytes {
+				return 0, nil, 1009, errTooLarge
+			}
+			msg = append(msg, payload...)
+			if fin {
+				return msgOp, msg, 0, nil
+			}
+		}
 	}
-	fin := hdr[0]&0x80 != 0
-	op := hdr[0] & 0x0F
-	masked := hdr[1]&0x80 != 0
-	n := int64(hdr[1] & 0x7F)
+}
+
+// frameHeader is the parsed, validated prefix of one RFC 6455 frame.
+type frameHeader struct {
+	fin        bool
+	op         byte
+	masked     bool
+	payloadLen uint64
+	headerLen  int
+}
+
+// parseFrameHeader parses and validates the header prefix of one frame.
+// data must hold at least the 2-byte base header; the returned headerLen
+// tells how many leading bytes the full header occupies (2 + ext + key).
+// It enforces: no RSV bits, known opcode, masked client frames, control
+// limits (final, <=125), and the maxFramePayload cap. Pure and fuzzable.
+func parseFrameHeader(data []byte) (frameHeader, error) {
+	var fh frameHeader
+	if len(data) < 2 {
+		return fh, io.ErrUnexpectedEOF
+	}
+	b0, b1 := data[0], data[1]
+	if b0&0x70 != 0 {
+		return fh, errProtocol // RSV1/2/3 set -> 1002
+	}
+	fh.fin = b0&0x80 != 0
+	fh.op = b0 & 0x0F
+	switch fh.op {
+	case 0x0, 0x1, 0x2, 0x8, 0x9, 0xA:
+	default:
+		return fh, errBadOp // -> 1003
+	}
+	fh.masked = b1&0x80 != 0
+	if !fh.masked {
+		return fh, errProtocol // clients must mask -> 1002
+	}
+	n := uint64(b1 & 0x7F)
+	off := 2
+	switch n {
+	case 126:
+		if len(data) < 4 {
+			return fh, io.ErrUnexpectedEOF
+		}
+		n = uint64(data[2])<<8 | uint64(data[3])
+		off = 4
+		// Minimal-length encoding is SHOULD-level; accept either way.
+		_ = off
+	case 127:
+		if len(data) < 10 {
+			return fh, io.ErrUnexpectedEOF
+		}
+		n = 0
+		for _, b := range data[2:10] {
+			n = n<<8 | uint64(b)
+		}
+		if n>>63 != 0 {
+			return fh, errTooLarge
+		}
+		off = 10
+	}
+	fh.payloadLen = n
+	isControl := fh.op >= 0x8
+	if isControl {
+		if !fh.fin {
+			return fh, errProtocol
+		}
+		if n > 125 {
+			return fh, errProtocol
+		}
+	} else if n > maxFramePayload {
+		return fh, errTooLarge // -> 1009
+	}
+	fh.headerLen = off + 4 // masked: always a 4-byte key
+	if len(data) < fh.headerLen {
+		return fh, io.ErrUnexpectedEOF
+	}
+	return fh, nil
+}
+
+func closeCodeFor(err error) uint16 {
+	switch {
+	case errors.Is(err, errTooLarge):
+		return 1009
+	case errors.Is(err, errBadOp):
+		return 1003
+	case errors.Is(err, errProtocol):
+		return 1002
+	default:
+		return 0
+	}
+}
+
+// readFrame parses one RFC 6455 frame. Returns final flag, opcode and
+// (unmasked) payload, plus a close code (0 when no close frame applies).
+// Every malformed packet maps to a short error and a close code; nothing
+// here panics or logs a stack trace regardless of wire bytes.
+func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
+	var base [2]byte
+	if _, err := io.ReadFull(conn, base[:]); err != nil {
+		return false, 0, nil, 0, err
+	}
+	// Early RSV/opcode check on the first byte alone, before trusting any
+	// length bytes.
+	b0 := base[0]
+	if b0&0x70 != 0 {
+		return false, 0, nil, 1002, errProtocol
+	}
+	switch op := b0 & 0x0F; op {
+	case 0x0, 0x1, 0x2, 0x8, 0x9, 0xA:
+	default:
+		return false, 0, nil, 1003, errBadOp
+	}
+	if base[1]&0x80 == 0 {
+		return false, 0, nil, 1002, errProtocol
+	}
+	n := uint64(base[1] & 0x7F)
+	header := append([]byte{base[0], base[1]}, make([]byte, 0, 12)...)
 	switch n {
 	case 126:
 		var ext [2]byte
 		if _, err := io.ReadFull(conn, ext[:]); err != nil {
-			return false, 0, nil, err
+			return false, 0, nil, 0, err
 		}
-		n = int64(ext[0])<<8 | int64(ext[1])
+		header = append(header, ext[:]...)
+		n = uint64(ext[0])<<8 | uint64(ext[1])
 	case 127:
 		var ext [8]byte
 		if _, err := io.ReadFull(conn, ext[:]); err != nil {
-			return false, 0, nil, err
+			return false, 0, nil, 0, err
 		}
+		header = append(header, ext[:]...)
 		n = 0
 		for _, b := range ext {
-			n = n<<8 | int64(b)
+			n = n<<8 | uint64(b)
+		}
+		if n>>63 != 0 {
+			return false, 0, nil, 1009, errTooLarge
 		}
 	}
-	var mask [4]byte
-	if masked {
-		if _, err := io.ReadFull(conn, mask[:]); err != nil {
-			return false, 0, nil, err
+	// Re-validate the assembled header through the pure parser so the
+	// fuzzed code path and the live path agree.
+	full := append(header, 0, 0, 0, 0) // placeholder key bytes
+	fh, perr := parseFrameHeader(full)
+	if perr != nil {
+		if errors.Is(perr, io.ErrUnexpectedEOF) {
+			// Header claimed ext bytes we already consumed; treat as
+			// a real parse of the length fields below.
+		} else {
+			return false, 0, nil, closeCodeFor(perr), perr
 		}
+	}
+	_ = fh
+	op := b0 & 0x0F
+	fin := b0&0x80 != 0
+	isControl := op >= 0x8
+	if isControl {
+		if !fin {
+			return false, 0, nil, 1002, errProtocol
+		}
+		if n > 125 {
+			return false, 0, nil, 1002, errProtocol
+		}
+	} else if n > maxFramePayload {
+		// Do not allocate: drain nothing, just close. The connection
+		// is unusable after a size lie anyway.
+		return false, 0, nil, 1009, errTooLarge
+	}
+	var mask [4]byte
+	if _, err := io.ReadFull(conn, mask[:]); err != nil {
+		return false, 0, nil, 0, err
+	}
+	if n > uint64(maxFramePayload) && !isControl {
+		return false, 0, nil, 1009, errTooLarge
 	}
 	payload := make([]byte, n)
 	if _, err := io.ReadFull(conn, payload); err != nil {
-		return false, 0, nil, err
+		return false, 0, nil, 0, err
 	}
-	if masked {
-		for i := range payload {
-			payload[i] ^= mask[i%4]
-		}
+	for i := range payload {
+		payload[i] ^= mask[i%4]
 	}
-	return fin, op, payload, nil
+	return fin, op, payload, 0, nil
 }
 
 // writeFrame emits one server-to-client (unmasked) frame.

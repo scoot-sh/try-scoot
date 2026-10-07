@@ -27,11 +27,16 @@
 
   # WS->TCP bridge + static file server (replaces python websockify + numpy).
   # Pure Go stdlib, static: the runtime closure is just this binary.
+  # go test (unit + malformed-frame battery; fuzz seeds run as unit tests)
+  # executes here so CI fails if the bridge regresses.
   wsbridge = runCommand "wsbridge" {nativeBuildInputs = [pkgs.go];} ''
     mkdir -p $out/bin $TMPDIR/gocache
     export GOCACHE=$TMPDIR/gocache GOFLAGS=-mod=mod
     export CGO_ENABLED=0
-    go build -trimpath -ldflags "-s -w" -o $out/bin/wsbridge ${./wsbridge/main.go}
+    cp -r ${./wsbridge} ./wsbridge-src
+    chmod -R u+w ./wsbridge-src
+    (cd ./wsbridge-src && go vet ./... && go test ./...)
+    go build -trimpath -ldflags "-s -w" -o $out/bin/wsbridge ./wsbridge-src
   '';
 
   # noVNC web tree, copied as real files (not symlinked): the nixpkgs `novnc`
