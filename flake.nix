@@ -49,8 +49,27 @@
         withLauncher = true;
         withLook = true;
       };
+      # Selkies variant stack (second, opt-in image; the default above is
+      # untouched by everything below).
+      selkiesStack = pkgs.callPackage ./nix/selkies-stack.nix {};
+      selkies = selkiesStack.selkies;
+      mkSelkiesImage = pkgs.callPackage ./nix/image-selkies.nix {
+        inherit scootPkg scootbgPkg scootbarPkg selkiesStack;
+      };
+      image-selkies-l0 = mkSelkiesImage {
+        name = "try-scoot-selkies-l0";
+        title = "try-scoot Selkies L0";
+        withDesktop = false;
+        withLook = false;
+      };
+      image-try-scoot-selkies = mkSelkiesImage {
+        name = "try-scoot-selkies";
+        title = "try-scoot Selkies";
+        withDesktop = true;
+        withLook = true;
+      };
     in {
-      inherit image-l0 image-l1 image-try-scoot;
+      inherit image-l0 image-l1 image-try-scoot selkies image-selkies-l0 image-try-scoot-selkies;
       default = image-try-scoot;
     });
 

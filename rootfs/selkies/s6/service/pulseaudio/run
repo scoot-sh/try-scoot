@@ -1,0 +1,10 @@
+#!/bin/bash
+# Container-local audio daemon for Selkies' capture, as abc: a null sink
+# whose monitor Selkies records. The socket lives under /run (container
+# local); nothing here listens on the network.
+set -u
+mkdir -p /run/pulse
+chown abc:abc /run/pulse
+echo "[pulseaudio] starting local daemon (socket /run/pulse/native)" >&2
+exec s6-setuidgid abc env HOME=/config XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/911}" \
+  pulseaudio --daemonize=no --system=false --disallow-exit --exit-idle-time=-1 -n -F /defaults/selkies-pulse.pa

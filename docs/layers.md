@@ -38,3 +38,21 @@ engines -- 2.25 GB reported for a 594 MB export -- so it is not used);
 idle CPU/RAM via `docker stats` with a viewer attached after a 30 s
 settle. `scoot` itself is 7 MB (stripped -- no debug-symbols problem);
 `dejavu_fonts`/`tzdata`/`adwaita` are single-digit-to-tens MB, not the fight.
+
+## Selkies variant layers (`:selkies` tag)
+
+Built by `nix/image-selkies.nix` (the default builder above is untouched);
+numbers are tarball bytes and `docker export`, same method:
+
+- `image-selkies-l0`: Selkies 2.0.0 + PulseAudio + GL stack, no desktop.
+  The compositor comes up empty; the web UI loads and the x264 software
+  encoder runs. Pull 494,739,938 B (471.8 MiB), unpacked 1,691,484,160 B
+  (1.575 GiB), idle 0.18% / 71.7 MiB.
+- `image-try-scoot-selkies`: L0 + nested scoot + `scootbar` + `scootbg` +
+  `fuzzel` + the default look. The desktop itself adds ~20 MB of pull
+  (514,428,977 B / 490.6 MiB; unpacked 1,753,701,888 B / 1.633 GiB); the
+  rest of the gap to the VNC tag is the Selkies stack the VNC diet
+  deleted: mesa/GL back in, the Python runtime with the Selkies app and
+  the pixelflux/pcmflux wheels, and the PulseAudio daemon. Idle 0.26% /
+  119.2 MiB without a viewer, 0.19% / 123.9 MiB with a viewer on a static
+  screen.

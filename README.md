@@ -123,6 +123,41 @@ matters more, not less. WebRTC is not used here, so there are no UDP ports,
 STUN/TURN servers, or host-networking needs: one TCP port carries the whole
 desktop.
 
+## Selkies variant (`:selkies`, experimental)
+
+A second, opt-in image streams the same desktop through Selkies (software
+H.264 + audio) instead of VNC. The one-liner above stays the default; this
+is the clearly labeled second option:
+
+```sh
+docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
+docker logs <container>  # generated password (use the last GENERATED line); open http://localhost:8080/
+```
+
+Trade-offs, measured (see docs/selkies.md for method): ~491 MiB pull and
+~1.63 GiB unpacked (vs ~177 MiB / ~566 MiB for this tag), ~0.2% / ~119
+MiB idle without a viewer (vs ~0% / ~43 MiB) and 27-48% / ~143 MiB with
+a viewer attached and actively streaming (software x264 at 60 fps -- the
+expected cost), `docker run` to painted desktop ~2 s in a
+browser. What you gain is audio (VNC has none) and H.264 motion
+efficiency; what you pay is a bigger image (the GL + Python + PulseAudio
+stack the VNC tag deleted on purpose), a busier streaming idle, and a
+second port family if you switch it to WebRTC mode. The server is
+fail-closed by default: with no password it generates one, prints it once
+to `docker logs`, and keeps the login on -- so keep the port on loopback
+exactly as with the default tag and read the log; `-e
+SELKIES_BASIC_AUTH_PASSWORD='...'` sets your own (a set password never
+starts open; a wrong one gets 401); `-e TRY_SCOOT_INSECURE_OPEN=1` is the
+explicit loopback-only open mode. The server cannot tell a rebound Host
+apart, so auth is the defense. File transfers are off by default
+(`SELKIES_FILE_TRANSFERS=upload,download` opts back in); recording has no
+upstream off switch and stays behind the login.
+Typing and pointing arrive over remote input AND compositor chords fire
+(proven live: remote Alt+Return spawns a terminal) -- remote reach is
+shell-equivalent, so keep it on loopback or behind a password, mirroring
+the default tag's posture since PR #2. Full posture, modes, and packaging notes in
+docs/selkies.md.
+
 ## Build
 
 With Nix on Linux:

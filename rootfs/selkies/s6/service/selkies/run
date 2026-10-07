@@ -1,0 +1,99 @@
+#!/bin/bash
+# Selkies streaming service, as abc: serves the desktop's web UI plus the
+# WebSocket transport on one TCP port (SELKIES_PORT, default 8080, bound to
+# SELKIES_ADDR, default 0.0.0.0). WebRTC is an env switch on the same
+# service (SELKIES_MODE=webrtc), not a second port or process.
+#
+# Security posture (see docs/selkies.md): fail closed by default. The server
+# has no Host pin, so a DNS-rebound page passes the Origin check by
+# construction (Origin == Host) -- auth is the only defense, never
+# "login page at most". Therefore:
+# - Password set (SELKIES_BASIC_AUTH_PASSWORD, PASSWORD, or PASSWD): login
+#   on. A set password never starts open.
+# - No password and no opt-in: a random password is generated, printed ONCE
+#   to the container log (read it with `docker logs <container>`), and the
+#   login stays on. The documented one-liner works and is safe.
+# - Explicit open only with TRY_SCOOT_INSECURE_OPEN=1 (or an explicit
+#   SELKIES_ENABLE_BASIC_AUTH=false): old open mode, loud warning, loopback
+#   publish only. An explicit SELKIES_ENABLE_BASIC_AUTH=true with no
+#   password refuses to start upstream (fail-closed, non-zero).
+# File transfers default OFF in this image (SELKIES_FILE_TRANSFERS=none):
+# a demo does not need upload/download, and both were open routes in the
+# open default. Set SELKIES_FILE_TRANSFERS=upload,download (or
+# TRY_SCOOT_ENABLE_FILE_TRANSFERS=1 for the upstream default) to opt back
+# in. Recording has no upstream disable switch (only SELKIES_RECORDING_SOCKET
+# for the out-of-band tap, default off; /api/recording itself is always
+# served when pixelflux is present), so it stays auth-gated behind the
+# password above instead of disabled.
+set -u
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
+MODE="${SELKIES_MODE:-websockets}"
+# Inside a container the publish flag (`-p 127.0.0.1:...`) is the network
+# boundary, not the bind address: a container-loopback bind is unreachable
+# through the mapping (same reason the default image's browser bridge binds
+# 0.0.0.0 while VNC stays on loopback). Keep this on 0.0.0.0 and the port
+# on host loopback, or tunnel over ssh.
+ADDR="${SELKIES_ADDR:-0.0.0.0}"
+PORT="${SELKIES_PORT:-8080}"
+
+echo "[selkies] waiting for audio socket /run/pulse/native"
+until [ -S /run/pulse/native ]; do sleep 0.5; done
+
+ARGS=(--mode="$MODE" --addr="$ADDR" --port="$PORT" --wayland=true)
+ARGS+=(--wayland-socket-index="${SELKIES_WAYLAND_SOCKET_INDEX:-0}")
+
+# Demo attack surface: file upload/download off unless the operator asks.
+# Upstream SELKIES_FILE_TRANSFERS default is "upload,download"; "" or "none"
+# disables both directions (checked in stream_server handle_upload /
+# fancy_index_handler). An explicit SELKIES_FILE_TRANSFERS wins; otherwise
+# TRY_SCOOT_ENABLE_FILE_TRANSFERS=1 restores the upstream default.
+if [ -z "${SELKIES_FILE_TRANSFERS:-}" ]; then
+  if [ "${TRY_SCOOT_ENABLE_FILE_TRANSFERS:-0}" = "1" ]; then
+    echo "[selkies] file transfers ON (TRY_SCOOT_ENABLE_FILE_TRANSFERS=1: upstream default upload,download)" >&2
+  else
+    ARGS+=(--file-transfers=none)
+    echo "[selkies] file transfers OFF by default (--file-transfers=none); set SELKIES_FILE_TRANSFERS=upload,download to allow" >&2
+  fi
+else
+  echo "[selkies] file transfers explicitly set (SELKIES_FILE_TRANSFERS=${SELKIES_FILE_TRANSFERS})" >&2
+fi
+# Note: recording (/api/recording) has no Selkies disable setting, so there
+# is nothing to append here; it stays behind the login enforced below.
+
+HAVE_PW=""
+if [ -n "${SELKIES_BASIC_AUTH_PASSWORD:-${PASSWORD:-${PASSWD:-}}}" ]; then
+  HAVE_PW=1
+fi
+
+if [ -n "${SELKIES_ENABLE_BASIC_AUTH:-}" ]; then
+  # Explicit operator choice wins in both directions; upstream refuses to
+  # start when true is set without a password (fail-closed, non-zero).
+  if [ "${SELKIES_ENABLE_BASIC_AUTH}" = "false" ] && [ -z "$HAVE_PW" ] && [ "${TRY_SCOOT_INSECURE_OPEN:-0}" != "1" ]; then
+    echo "[selkies] WARNING: SELKIES_ENABLE_BASIC_AUTH=false with no password: OPEN mode, NO LOGIN on $ADDR:$PORT -- keep it on loopback (-p 127.0.0.1:$PORT:$PORT) or tunnel over ssh; prefer a generated password (unset the flag) or TRY_SCOOT_INSECURE_OPEN=1 to mark the choice" >&2
+  fi
+  if [ -n "$HAVE_PW" ]; then
+    echo "[selkies] AUTHENTICATED mode: login on (user ${SELKIES_BASIC_AUTH_USER:-ubuntu}); wrong passwords get 401" >&2
+  fi
+elif [ -n "$HAVE_PW" ]; then
+  ARGS+=(--enable-basic-auth=true)
+  echo "[selkies] AUTHENTICATED mode: login on (user ${SELKIES_BASIC_AUTH_USER:-ubuntu}); wrong passwords get 401" >&2
+elif [ "${TRY_SCOOT_INSECURE_OPEN:-0}" = "1" ]; then
+  ARGS+=(--enable-basic-auth=false)
+  echo "[selkies] WARNING: INSECURE OPEN mode (TRY_SCOOT_INSECURE_OPEN=1): NO LOGIN on $ADDR:$PORT -- keep it on loopback (-p 127.0.0.1:$PORT:$PORT) or tunnel over ssh; unset the flag for a generated password" >&2
+else
+  # Fail closed with the best one-liner UX: generate, print once, stay shut.
+  GEN_PW="$(head -c 18 /dev/urandom | base64 2>/dev/null | tr -d '=+/\n' | head -c 24)"
+  if [ -z "$GEN_PW" ]; then
+    echo "[selkies] FATAL: no password configured (SELKIES_BASIC_AUTH_PASSWORD/PASSWORD/PASSWD all unset) and password generation failed; refusing to start open. Set a password or TRY_SCOOT_INSECURE_OPEN=1." >&2
+    exit 1
+  fi
+  export SELKIES_BASIC_AUTH_PASSWORD="$GEN_PW"
+  ARGS+=(--enable-basic-auth=true)
+  echo "[selkies] GENERATED password (no password configured; login stays ON): $GEN_PW" >&2
+  echo "[selkies] Retrieve with: docker logs <container> (printed once at startup); to choose your own, -e SELKIES_BASIC_AUTH_PASSWORD='...'; for the old open mode, TRY_SCOOT_INSECURE_OPEN=1 (loopback only)" >&2
+fi
+
+echo "[selkies] serving $MODE on $ADDR:$PORT" >&2
+exec s6-setuidgid abc env XDG_RUNTIME_DIR="$RUNTIME" HOME=/config \
+  ${SELKIES_BASIC_AUTH_PASSWORD:+SELKIES_BASIC_AUTH_PASSWORD="$SELKIES_BASIC_AUTH_PASSWORD"} \
+  selkies "${ARGS[@]}"

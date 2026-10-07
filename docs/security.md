@@ -83,3 +83,12 @@ rather than publishing the port.
   never a stack trace.
 - `--shm-size`: not needed. The default is fine; the image does not require
   DRI devices, GPU flags, or privileged mode. Never `--privileged`.
+
+## Selkies variant (`:selkies`)
+
+The above is the default tag. The variant's posture lives in
+docs/selkies.md (Security): loopback by published port, fail-closed login
+via Selkies' own basic-auth variables (wrong passwords get 401, proven at
+the page and WebSocket layers), Origin-gated upgrades with no Host pin
+(stated limits), non-root `abc`, no TURN secret shipped. Same `--shm-size`
+and `--privileged` story: neither needed, never privileged.

@@ -26,6 +26,8 @@ jobs:
       - run: nix flake check
       - run: nix fmt -- --check
   build:
+    # Default image only: never builds or waits for the Selkies variant, so
+    # the default tag's CI time stays ~2 min. See build-selkies below.
     strategy:
       matrix:
         include:
@@ -45,6 +47,29 @@ jobs:
         with:
           upstream-cache: https://cache.nixos.org
       - run: nix build .#image-try-scoot --print-build-logs
+  build-selkies:
+    # Selkies variant only, isolated from the default build: a selkies-only
+    # failure fails this job, never the default's, and the default never
+    # waits for the ~500 MB variant.
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://scoot-sh.cachix.org
+            extra-trusted-public-keys = scoot-sh.cachix.org-1:QMj7CMw8uqZxrvqqm6SggdxTHz6Q4prt30ydDcXJXCo=
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.nixos.org
+      - run: nix build .#image-try-scoot-selkies --print-build-logs
   push:
     # main pushes AND same-repo PR pushes. PRs from forks are excluded by the
     # full_name guard: their GITHUB_TOKEN cannot write this repo's packages,
@@ -52,6 +77,7 @@ jobs:
     # pr-<N>-<shortsha>-<system> per-arch tags so the ghcr.io one-liner is
     # testable before merge (each arch pushes its own suffixed tag, so the
     # two jobs never clobber each other); :latest still tracks main only.
+    # Default image only (needs build, never build-selkies).
     if: >-
       (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
       (github.event_name == 'pull_request' &&
@@ -97,9 +123,57 @@ jobs:
           docker tag try-scoot:latest "ghcr.io/scoot-sh/try-scoot:${TAG}"
           docker push "ghcr.io/scoot-sh/try-scoot:${TAG}"
           echo "pushed ghcr.io/scoot-sh/try-scoot:${TAG}"
+  push-selkies:
+    # Selkies variant only, same PR/main scheme with a -selkies suffix
+    # (:selkies tracks main only, like :latest). Needs build-selkies, never
+    # the default build, so the default push never waits for the variant.
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [check, build-selkies]
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://scoot-sh.cachix.org
+            extra-trusted-public-keys = scoot-sh.cachix.org-1:QMj7CMw8uqZxrvqqm6SggdxTHz6Q4prt30ydDcXJXCo=
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.nixos.org
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            shortsha="${{ github.event.pull_request.head.sha }}"
+            shortsha="${shortsha:0:7}"
+            TAG="pr-${{ github.event.number }}-${shortsha}-${{ matrix.system }}"
+          else
+            TAG="${{ matrix.system }}"
+          fi
+          sout=$(nix build .#image-try-scoot-selkies --no-link --print-out-paths)
+          docker load < $sout
+          docker tag try-scoot-selkies:latest "ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
+          docker push "ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
+          echo "pushed ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
   manifest:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [push]
+    needs: [push, push-selkies]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -115,3 +189,7 @@ jobs:
             ghcr.io/scoot-sh/try-scoot:x86_64-linux \
             ghcr.io/scoot-sh/try-scoot:aarch64-linux
           docker manifest push ghcr.io/scoot-sh/try-scoot:latest
+          docker manifest create ghcr.io/scoot-sh/try-scoot:selkies \
+            ghcr.io/scoot-sh/try-scoot:x86_64-linux-selkies \
+            ghcr.io/scoot-sh/try-scoot:aarch64-linux-selkies
+          docker manifest push ghcr.io/scoot-sh/try-scoot:selkies

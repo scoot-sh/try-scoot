@@ -32,8 +32,8 @@ Decision: ship wayvnc + noVNC for the one-liner (single TCP port 6080,
 damage-based, idles near zero, smallest closure: no npm, no nginx, no
 pulse daemon, no pixelflux wheels). Layer 0 below proves the same
 "smallest thing that streams" with VNC instead of Selkies/GStreamer. The
-Selkies WebRTC/GStreamer variant stays a backlog item (ticket T1): re-add
-it when the image needs audio + H.264 motion efficiency enough to pay the
-size, idle, and ports cost. Nothing in `nix/` is copied from the reference;
-the packaging notes above are written from upstream sources so a future
-`nix/selkies.nix` can be fresh MIT work.
+Selkies variant sketched here has since landed as the experimental
+`:selkies` tag (see docs/selkies.md for the mode decision, packaging, and
+measured costs); the notes above remain the research record. Nothing in
+`nix/` is copied from the reference; the packaging notes above are written
+from upstream sources so a future `nix/selkies.nix` can be fresh MIT work.
