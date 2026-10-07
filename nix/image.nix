@@ -124,9 +124,10 @@ let
   '';
 
   footConfig = pkgs.writeText "foot.ini" ''
-    [main]
-    font = monospace:size=11
-    [colors]
+    font = DejaVu Sans Mono:size=11
+    dpi-aware = no
+
+    [colors-dark]
     background = 1e1a2b
     foreground = e6e1f5
   '';
