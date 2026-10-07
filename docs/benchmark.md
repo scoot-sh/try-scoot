@@ -12,7 +12,10 @@ docs/layers.md; the headline before/after is:
 | revision | tarball (pull) | unpacked (`docker export`, flattened) |
 |---|---|---|
 | `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB) |
-| this head (`7753542`+) | 185,474,953 B (176.9 MiB) | 593,991,680 B (566.4 MiB) |
+| this head (scoot `b11eb8c`, `binds = true`) | 185,486,893 B (176.9 MiB) | 595,570,688 B (568.0 MiB) |
+
+No pull regression from 177 MiB (+11,940 B tarball, +1.6 MB unpacked --
+scoot version drift, same diet).
 
 ## Time-to-first-frame
 
@@ -27,41 +30,50 @@ start and the first-frame probe:
 
 Idle with a viewer attached: 0.00% CPU (docker stats), ~49 MiB docker MEM,
 NET 78.6 kB rx / 1.75 MB tx over the ~60 s playwright session (frame-flow
-witness); idle without viewer: 0.00%, ~43 MiB. The VNC damage model ships
+witness); idle without viewer: 0.00%, ~43 MiB (re-measured this head fresh:
+0.00%, 37.3 MiB, 1 window; 5 windows + viewer attached: 0.00%, 92 MiB).
+The VNC damage model ships
 almost nothing on a static screen (same shape as the reference
 `image-scoot-vnc` idle win: 0.0% CPU / 0.9 kB/s vs
 Selkies 5.0% / 11.1 kB/s holding a static screen -- methodology differs, see
 docs/layers.md).
 
-## Input truth (N2)
+## Input truth (binds ON)
 
+With scoot `b11eb8c` (contains #494) and the image's `[virtual_input]
+enabled = true` + `binds = true` (restart-only), remote chords run binds.
 Established with a scripted RFB client (`rfb-probe.py`, stdlib Python: real
 `KeyEvent`/`PointerEvent` frames over TCP, checked against
 `scoot msg windows` + `scoot msg screenshot`) driving the wayvnc port
-directly, plus headless Chromium through the noVNC path:
+directly, plus headless Chromium (Google Chrome 154, playwright-core)
+through the noVNC path. `scoot msg locked` was `false` throughout; while
+locked, virtual input (including binds) is dropped and can never unlock.
 
 - Typing works: plain keys, Shift (`Shift+t` -> `T` in foot, screenshot),
-  Ctrl (`Ctrl+l` clears the screen, screenshot). Headless Chromium typed
-  `echo hello-browser` into foot and it executed (screenshot).
+  Ctrl (`Ctrl+l` clears the screen, screenshot) from the prior round still
+  hold; this round RFB `touch /tmp/vnctypeok` + Return creates the file, and
+  headless Chromium typed `echo hello-browser` into foot (screenshots
+  `brow-typed.png`, `brow-desktop.png`).
 - Clicks work: click on the unfocused foot flips `focused` in
   `scoot msg windows`; click on bar workspace `2` switches to the empty
-  workspace (screenshot: windows gone, cursor on `2`).
-- Compositor chords over VNC never fire: `Alt+Return`, `Alt+t`, `Alt+d`,
-  `Super+Return`, via raw RFB and via headless Chromium (`Alt+Enter`
-  screenshot byte-identical, window count unchanged). This is **not** a test
-  artifact and not an image defect: scoot's `virtual_input` module delivers
-  virtual-keyboard input through a forward-only filter, so remote keys reach
-  clients but never run keybindings ("window management stays local" --
-  quoted from `crates/scoot/src/compositor/virtual_input.rs` at the locked
-  scoot rev `74358ec`). Nothing in this packaging repo can change that; the
-  `VNC_KEYBOARD=us` knob was also tried and changes nothing.
-- The binds themselves are live and functional: `scoot msg binds` lists
-  `alt+Return`/`alt+t`/`alt+d`/`alt+q` (+ super mirrors) from config, and
-  `scoot msg key alt+Return` spawns a terminal (window count 1 -> 2).
-  Agents drive chords via `scoot msg key` / `scoot msg pointer` instead.
-- README advertises exactly this: typing + pointing over VNC, chords via
-  `scoot msg`. Browser-side note: some browsers additionally grab
-  Alt/Super, but the chords would not fire even if they arrived.
+  workspace (prior-round screenshots, unchanged behavior).
+- Compositor chords over VNC now fire (was: never, under scoot `74358ec`'s
+  forward-only `virtual_input` filter). Raw RFB: `Alt+Return` 1 -> 2 windows,
+  `Super+Return` 2 -> 3, `Alt+d` respawns fuzzel after `pkill` (new pid),
+  `Alt+h` 3 -> 2 focused then `Alt+l` 2 -> 3. Headless browser:
+  `Alt+Enter` + `Meta+Enter` (Super) 3 -> 5 windows, `Alt+d` respawns fuzzel
+  after a kill, `Alt+h` 4 -> 1 then `Alt+l` 1 -> 2 focused (all via
+  `scoot msg windows` + `pgrep fuzzel` + screenshots `brow-altenter.png`,
+  `brow-superenter.png`, `brow2-altd2.png`, `h-only.png`, `l-only.png`).
+  Status stayed `Connected (unencrypted) to WayVNC`.
+- The binds themselves are live: `scoot msg binds` lists `alt+Return` /
+  `alt+d` / `alt+q` (+ super mirrors) from config, and
+  `scoot msg key alt+Return` still spawns a terminal. Agents can use either
+  path; `scoot msg key` / `scoot msg pointer` remains the fallback that never
+  depends on browser focus.
+- README advertises exactly this: chords fire over VNC, with the
+  browser-side caveat (some browsers/OSes grab Alt/Super/Cmd -- click the
+  canvas first, try the `Super` mirror) and the `scoot msg key` fallback.
 
 ## Reference deltas
 

@@ -16,6 +16,16 @@ rather than publishing the port.
   target (`0.0.0.0` / `[::]` map back to `localhost`). A `VNC_LISTEN` holding
   a unix socket path is unsupported: both the wayvnc and browser services
   refuse to start loudly (non-zero exit) rather than dialing the wrong port.
+- Remote binds are ON in this image (`[virtual_input] binds = true` with
+  `enabled = true`, restart-only): any remote client that can reach the VNC
+  port can now also spawn programs and run compositor actions through binds
+  (a terminal, the launcher, focus/close) -- not just type and click. That is
+  the same trust boundary scoot states for `enabled` widened one step (see
+  scoot `remote-desktop.md` / `protocols.md`: no security-context support),
+  so keep `binds` for sessions the remote user owns (this webtop) and VNC
+  reach equivalent to shell. The one-liner's posture is unchanged:
+  loopback-only browser port by default with an optional loopback-grade
+  `VNC_PASSWORD`; only what reach implies is stronger.
 - `VNC_PASSWORD`: when set, the wayvnc service enables password auth and the
   port is protected (fail-closed -- a set password never starts open). The
   service writes a wayvnc config (`/config/.config/wayvnc/config`, 0600,
