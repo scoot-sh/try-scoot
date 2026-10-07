@@ -41,14 +41,17 @@ docs/layers.md).
 ## Selkies variant (`:selkies`)
 
 Same method, Mac Docker Desktop (arm64) runs of M2-built images; full
-tables in docs/selkies.md. Pull: L0 494,739,938 B (471.8 MiB), full
-514,428,977 B (490.6 MiB) vs 185,474,953 B (176.9 MiB) for the default
-tag. Unpacked (`docker export`): L0 1,691,484,160 B, full 1,753,701,888
-B vs 593,991,680 B. Run to stream (full tag): HTTP 200 at 1.05 s, first
-client settings applied (1280x800 h264enc) at 1.6 s, painted desktop in a
-persistent headless-Chromium connection (screenshots). Idle: full 0.26% /
-119.2 MiB without a viewer, 0.19% / 123.9 MiB with a viewer on a static
-screen; L0 0.18% / 71.7 MiB.
+tables in docs/selkies.md. Pull: L0 494,742,034 B (471.8 MiB), full
+514,438,714 B (490.6 MiB) vs 185,486,893 B (176.9 MiB) for the default
+tag (post-#2; pre-#2 reviewed baseline 185,480,055 B). Unpacked
+(`docker export` of created containers): L0 1,686,177,792 B, full
+1,748,387,328 B vs 593,987,072 B. Run to stream (full tag): HTTP 200 at
+1.05 s, first client settings applied (1280x800 h264enc) at 1.6 s,
+painted desktop in a persistent headless-Chromium connection
+(screenshots). Idle: full 0.19-0.27% / ~119 MiB without a viewer,
+27-48% / ~143 MiB with a viewer attached and actively streaming
+(software x264 FullFrame 60 fps -- the old 0.19%-with-viewer claim came
+from a backgrounded client); L0 0.18% / 71.7 MiB (prior round).
 
 ## Input truth (binds ON)
 
