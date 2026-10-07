@@ -123,6 +123,11 @@
     [output]
     [virtual_input]
     enabled = true
+    # NOTE: deliberately no `binds = true` here, unlike nix/image.nix.
+    # That flag governs virtual-keyboard input only; the Selkies path
+    # delivers remote chords through the compositor seat keymap (real seat
+    # input to the nested scoot, not virtual-keyboard), so chords fire
+    # regardless and the flag would be a no-op. See docs/selkies.md.
 
     [wallpaper]
     ${lib.optionalString withDesktop ''        image = "/defaults/wallpaper.png"
