@@ -48,7 +48,7 @@ rather than publishing the port.
   in `WSBRIDGE_ALLOW_HOST` (comma-separated `host[:port]`, empty by default),
   otherwise 403 (`host not allowed (set WSBRIDGE_ALLOW_HOST to allow this
   host)`; the log names the variable once, not per attempt). Requests with
-  no `Origin` header are allowed (non-browser clients such as scripted tests
+  an allowed Host and no `Origin` header are allowed (non-browser clients such as scripted tests
   send none); requests with an `Origin` are allowed only when it equals the
   request's own Host or is a loopback spelling at the same port, otherwise
   403. Rebound `Host` + matching `Origin` is therefore refused. Plain HTTP

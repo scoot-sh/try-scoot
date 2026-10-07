@@ -83,7 +83,7 @@ docker run --rm -p 6080:6080 -e WSBRIDGE_ALLOW_HOST=192.168.1.5:6080 ghcr.io/sco
 
 A bare hostname allows any port; a `host:port` entry requires that exact
 port. A non-default browser port (`-e NOVNC_PORT=6081 -p 127.0.0.1:6081:6081`)
-keeps working on `localhost` because the pin tracks the served port. Without
+keeps working on `localhost` because the pin exempts loopback names at any port. Without
 a listing the upgrade gets 403 (`host not allowed (set WSBRIDGE_ALLOW_HOST
 to allow this host)`) and the log names the variable once.
 
