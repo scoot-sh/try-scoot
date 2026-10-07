@@ -1,0 +1,51 @@
+#!/bin/bash
+# try-scoot container entrypoint. Fresh implementation for this repo.
+# One-shot setup as root, then exec s6-svscan as PID 1.
+set -u
+
+log() { echo "[init] $*"; }
+
+log "try-scoot starting (title: ${TITLE:-try-scoot})"
+
+PUID="${PUID:-911}"
+PGID="${PGID:-911}"
+
+if [ "$(id -g abc)" != "$PGID" ]; then groupmod -o -g "$PGID" abc; fi
+if [ "$(id -u abc)" != "$PUID" ]; then usermod -o -u "$PUID" abc; fi
+log "abc uid=$(id -u abc) gid=$(id -g abc)"
+
+mkdir -p /config /run/service
+chmod 1777 /tmp
+chown abc:abc /config
+if [ "${SKIP_CHOWN_CONFIG:-false}" != "true" ]; then
+  chown -R abc:abc /config 2>/dev/null || true
+fi
+mkdir -p /config/.local/bin /config/.local/share /config/.local/state
+chown -R abc:abc /config/.local
+
+export XDG_RUNTIME_DIR="/run/user/${PUID}"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+chown abc:abc "$XDG_RUNTIME_DIR"
+
+[ -s /etc/machine-id ] || dbus-uuidgen > /etc/machine-id
+
+seed() {
+  src="$1"; dst="$2"
+  if [ ! -f "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -L --remove-destination "$src" "$dst" 2>/dev/null || cp -L "$src" "$dst"
+    chmod u+w "$dst"
+  fi
+}
+
+HOME=/config
+seed /defaults/scoot-config.toml "$HOME/.config/scoot/config.toml"
+seed /defaults/bar.toml "$HOME/.config/scoot/bar.toml"
+seed /defaults/foot.ini "$HOME/.config/foot/foot.ini"
+seed /defaults/fuzzel.ini "$HOME/.config/fuzzel/fuzzel.ini"
+seed /defaults/wallpaper.png "$HOME/.config/scoot/wallpaper.png"
+chown -R abc:abc /config/.config 2>/dev/null || true
+
+log "handing off to s6-svscan"
+exec /usr/bin/s6-svscan /etc/s6/service

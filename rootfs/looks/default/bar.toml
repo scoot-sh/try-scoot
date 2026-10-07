@@ -1,0 +1,14 @@
+left = ["workspaces"]
+center = ["clock"]
+right = []
+
+[bar]
+height = 36
+
+[colors]
+background = "#1e1a2b"
+foreground = "#e6e1f5"
+accent = "#7c6cf0"
+
+[clock]
+format = "%H:%M"

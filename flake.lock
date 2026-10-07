@@ -1,0 +1,65 @@
+{
+  "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1787326676,
+        "narHash": "sha256-lWhBbBvC05/xwivKBBiM2YNizpmgqCgyOIzomvRuwxs=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "32daa78aa882b7a43c508d1d5a5ad18a7968d731",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "32daa78aa882b7a43c508d1d5a5ad18a7968d731",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1789006805,
+        "narHash": "sha256-xB8mKMOx1IA9vTDNLmJZ6n4wCMq/cuWBBOzGCRnqxrU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "8ce4ef6cb6f871616146b9fe26d2a5ae594e94fe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "scoot": "scoot"
+      }
+    },
+    "scoot": {
+      "inputs": {
+        "crane": "crane",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791339330,
+        "narHash": "sha256-25hwEpF+fokX+usZWl4hA1512xi+Ro5nzO+QmqksxG8=",
+        "owner": "scoot-sh",
+        "repo": "scoot",
+        "rev": "74358ec796a2ef74ccb25817e52257b1d7588841",
+        "type": "github"
+      },
+      "original": {
+        "owner": "scoot-sh",
+        "repo": "scoot",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

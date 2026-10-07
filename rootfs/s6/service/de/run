@@ -1,0 +1,6 @@
+#!/bin/bash
+# Desktop service: run the scoot session as abc.
+STARTWM=/defaults/startwm.sh
+[ -x "$HOME/.config/startwm.sh" ] && STARTWM="$HOME/.config/startwm.sh"
+cd "$HOME"
+exec s6-setuidgid abc dbus-run-session --config-file=/usr/share/dbus-1/session.conf -- bash "$STARTWM"
