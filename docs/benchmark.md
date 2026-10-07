@@ -8,10 +8,10 @@ images where stated.
 `docker images ghcr.io/scoot-sh/try-scoot` (compressed pull + unpacked).
 Per-step diet numbers live in docs/layers.md; the headline before/after is:
 
-| revision | tarball (pull) | unpacked (`docker image inspect .Size`) |
+| revision | tarball (pull) | unpacked (`docker export`, flattened) |
 |---|---|---|
-| `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB) |
-| this head | _filled in during the live proof_ | _filled in during the live proof_ |
+| `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB; `docker image inspect .Size`) |
+| this head (`7753542`+) | 185,474,953 B (176.9 MiB) | 593,991,680 B (566.4 MiB) |
 
 ## Time-to-first-frame
 
@@ -22,11 +22,13 @@ start and the first-frame probe:
 | revision | run -> wayvnc capturing | run -> first browser frame |
 |---|---|---|
 | `c17611a` | 1.0 s (reviewer, M2-class host) | _n/a (implementer 9.0 s incl. browser launch)_ |
-| this head | _filled in during the live proof_ | _filled in during the live proof_ |
+| this head | 1.2 s (`date +%s.%N` around `docker run`, 0.2 s poll) | 1.3 s (run -> HTTP 200; headless Chromium painted the desktop in the same session, screenshots) |
 
-Idle with a viewer attached: ~0.01% CPU (docker stats), ~125-162 MiB docker
-MEM; the VNC damage model ships almost nothing on a static screen (same
-shape as the reference `image-scoot-vnc` idle win: 0.0% CPU / 0.9 kB/s vs
+Idle with a viewer attached: 0.00% CPU (docker stats), ~49 MiB docker MEM,
+NET 78.6 kB rx / 1.75 MB tx over the ~60 s playwright session (frame-flow
+witness); idle without viewer: 0.00%, ~43 MiB. The VNC damage model ships
+almost nothing on a static screen (same shape as the reference
+`image-scoot-vnc` idle win: 0.0% CPU / 0.9 kB/s vs
 Selkies 5.0% / 11.1 kB/s holding a static screen -- methodology differs, see
 docs/layers.md).
 
