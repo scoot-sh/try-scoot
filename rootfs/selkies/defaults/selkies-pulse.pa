@@ -1,0 +1,7 @@
+# Local audio for the Selkies variant: a single null sink holds session audio
+# and Selkies records its monitor. Only the container-local unix socket is
+# published; no network audio module is loaded here.
+load-module module-null-sink sink_name=output sink_properties=device.description="Selkies-Output"
+load-module module-always-sink
+set-default-sink output
+load-module module-native-protocol-unix auth-anonymous=1 socket=/run/pulse/native

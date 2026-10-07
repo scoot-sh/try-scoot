@@ -1,0 +1,17 @@
+#!/bin/bash
+# Nested desktop service: wait for Selkies' compositor socket, then run the
+# scoot session inside it as abc. Absent from the L0 image (no desktop nests
+# there); the skeleton drops this directory when the desktop is off.
+set -u
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
+# The compositor names its own socket (here wayland-1: index 0 is its command
+# socket, not the display), so take whatever Wayland socket exists before any
+# nested session creates a second one, instead of guessing the name.
+shopt -s nullglob
+SOCK=""
+until SOCK=( "$RUNTIME"/wayland-* ) && [ "${#SOCK[@]}" -gt 0 ] && [ -S "${SOCK[0]}" ]; do sleep 0.5; done
+shopt -u nullglob
+PARENT="$(basename "${SOCK[0]}")"
+echo "[de] compositor socket $PARENT; starting nested scoot"
+exec s6-setuidgid abc env WAYLAND_DISPLAY="$PARENT" XDG_RUNTIME_DIR="$RUNTIME" HOME=/config \
+  bash /defaults/startwm-selkies.sh

@@ -1,0 +1,45 @@
+#!/bin/bash
+# Selkies streaming service, as abc: serves the desktop's web UI plus the
+# WebSocket transport on one TCP port (SELKIES_PORT, default 8080, bound to
+# SELKIES_ADDR, default localhost). WebRTC is an env switch on the same
+# service (SELKIES_MODE=webrtc), not a second port or process.
+#
+# Security posture (see docs/selkies.md):
+# - Password set (SELKIES_BASIC_AUTH_PASSWORD, PASSWORD, or PASSWD): the
+#   login is always on. A set password never starts open.
+# - No password set and no explicit SELKIES_ENABLE_BASIC_AUTH: the login is
+#   off, same loopback default as the VNC tag -- keep the port on loopback
+#   or tunnel over ssh, and set a password otherwise.
+# - An explicit SELKIES_ENABLE_BASIC_AUTH always wins over this defaulting,
+#   in both directions (true with no password refuses to start: fail-closed
+#   upstream).
+set -u
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
+MODE="${SELKIES_MODE:-websockets}"
+# Inside a container the publish flag (`-p 127.0.0.1:...`) is the network
+# boundary, not the bind address: a container-loopback bind is unreachable
+# through the mapping (same reason the default image's browser bridge binds
+# 0.0.0.0 while VNC stays on loopback). Keep this on 0.0.0.0 and the port
+# on host loopback, or tunnel over ssh.
+ADDR="${SELKIES_ADDR:-0.0.0.0}"
+PORT="${SELKIES_PORT:-8080}"
+
+echo "[selkies] waiting for audio socket /run/pulse/native"
+until [ -S /run/pulse/native ]; do sleep 0.5; done
+
+ARGS=(--mode="$MODE" --addr="$ADDR" --port="$PORT" --wayland=true)
+ARGS+=(--wayland-socket-index="${SELKIES_WAYLAND_SOCKET_INDEX:-0}")
+
+if [ -z "${SELKIES_ENABLE_BASIC_AUTH:-}" ]; then
+  if [ -n "${SELKIES_BASIC_AUTH_PASSWORD:-${PASSWORD:-${PASSWD:-}}}" ]; then
+    ARGS+=(--enable-basic-auth=true)
+    echo "[selkies] AUTHENTICATED mode: login on (user ${SELKIES_BASIC_AUTH_USER:-ubuntu}); wrong passwords get 401" >&2
+  else
+    ARGS+=(--enable-basic-auth=false)
+    echo "[selkies] OPEN mode: no password configured, NO LOGIN on $ADDR:$PORT -- keep it on loopback (ssh -L) or set SELKIES_BASIC_AUTH_PASSWORD" >&2
+  fi
+fi
+
+echo "[selkies] serving $MODE on $ADDR:$PORT" >&2
+exec s6-setuidgid abc env XDG_RUNTIME_DIR="$RUNTIME" HOME=/config \
+  selkies "${ARGS[@]}"

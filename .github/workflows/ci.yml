@@ -44,7 +44,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           upstream-cache: https://cache.nixos.org
-      - run: nix build .#image-try-scoot --print-build-logs
+      - run: nix build .#image-try-scoot .#image-try-scoot-selkies --print-build-logs
   push:
     # main pushes AND same-repo PR pushes. PRs from forks are excluded by the
     # full_name guard: their GITHUB_TOKEN cannot write this repo's packages,
@@ -52,6 +52,8 @@ jobs:
     # pr-<N>-<shortsha>-<system> per-arch tags so the ghcr.io one-liner is
     # testable before merge (each arch pushes its own suffixed tag, so the
     # two jobs never clobber each other); :latest still tracks main only.
+    # The Selkies variant rides along under the same scheme with a -selkies
+    # suffix (:selkies tracks main only, like :latest).
     if: >-
       (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
       (github.event_name == 'pull_request' &&
@@ -91,12 +93,17 @@ jobs:
           else
             TAG="${{ matrix.system }}"
           fi
-          nix build .#image-try-scoot --print-build-logs
+          nix build .#image-try-scoot .#image-try-scoot-selkies --print-build-logs
           out=$(nix build .#image-try-scoot --no-link --print-out-paths)
           docker load < $out
           docker tag try-scoot:latest "ghcr.io/scoot-sh/try-scoot:${TAG}"
           docker push "ghcr.io/scoot-sh/try-scoot:${TAG}"
           echo "pushed ghcr.io/scoot-sh/try-scoot:${TAG}"
+          sout=$(nix build .#image-try-scoot-selkies --no-link --print-out-paths)
+          docker load < $sout
+          docker tag try-scoot-selkies:latest "ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
+          docker push "ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
+          echo "pushed ghcr.io/scoot-sh/try-scoot:${TAG}-selkies"
   manifest:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [push]
@@ -115,3 +122,7 @@ jobs:
             ghcr.io/scoot-sh/try-scoot:x86_64-linux \
             ghcr.io/scoot-sh/try-scoot:aarch64-linux
           docker manifest push ghcr.io/scoot-sh/try-scoot:latest
+          docker manifest create ghcr.io/scoot-sh/try-scoot:selkies \
+            ghcr.io/scoot-sh/try-scoot:x86_64-linux-selkies \
+            ghcr.io/scoot-sh/try-scoot:aarch64-linux-selkies
+          docker manifest push ghcr.io/scoot-sh/try-scoot:selkies
