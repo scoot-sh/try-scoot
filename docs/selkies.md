@@ -13,8 +13,9 @@ docker logs <container>  # read the generated password (printed once at startup)
 ```
 
 The server is fail-closed by default: with no password configured it
-generates a random one, prints it once to the container log, and keeps the
-login on -- the one-liner above works and is safe (a DNS-rebound page
+generates a random one, prints it to the container log, and keeps the
+login on (if the server process restarts inside the container, a new
+password is generated: always use the last `GENERATED` line, or set your own) -- the one-liner above works and is safe (a DNS-rebound page
 carries no credentials for the rebound origin, so without the password it
 gets 401 on every session route, proven live in the PR report). To choose
 your own password instead of reading the log:

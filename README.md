@@ -131,7 +131,7 @@ is the clearly labeled second option:
 
 ```sh
 docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
-docker logs <container>  # generated password (printed once); open http://localhost:8080/
+docker logs <container>  # generated password (use the last GENERATED line); open http://localhost:8080/
 ```
 
 Trade-offs, measured (see docs/selkies.md for method): ~491 MiB pull and
