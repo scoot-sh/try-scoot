@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 )
@@ -54,6 +56,7 @@ func TestIsWSUpgrade(t *testing.T) {
 }
 
 func TestOriginAllowed(t *testing.T) {
+	t.Setenv("WSBRIDGE_ALLOW_HOST", "")
 	cases := []struct {
 		host, origin string
 		want         bool
@@ -64,6 +67,7 @@ func TestOriginAllowed(t *testing.T) {
 		{"localhost:6080", "http://127.0.0.1:6080", true}, // loopback spelling, same port
 		{"localhost:6080", "http://[::1]:6080", true},
 		{"127.0.0.1:6080", "http://localhost:6080", true},
+		{"[::1]:6080", "http://localhost:6080", true},
 		{"localhost:6080", "https://localhost:6080", true},
 		{"localhost:6080", "http://localhost:3000", false}, // wrong port
 		{"localhost:6080", "http://evil.example", false},
@@ -72,12 +76,65 @@ func TestOriginAllowed(t *testing.T) {
 		{"localhost:6080", "null", false},
 		{"localhost:6080", "http://localhost", false}, // port 80 != 6080
 		{"localhost:6080", "file://localhost:6080", false},
-		{"example.com:6080", "http://example.com:6080", true}, // own host
+		// DNS-rebinding shape: Host is foreign even though Origin parrots
+		// it. Must be 403 (used to be allowed).
+		{"evil.com:6080", "http://evil.com:6080", false},
+		{"evil.com:6080", "", false}, // no Origin does not save a foreign Host
+		{"evil.com:6080", "http://localhost:6080", false},
+		{"192.168.1.5:6080", "http://192.168.1.5:6080", false}, // LAN IP needs allow-list
+		{"localhost.evil.com:6080", "http://localhost.evil.com:6080", false},
+		{"localhost.:6080", "http://localhost.:6080", false}, // trailing dot is not loopback
+		{"2130706433:6080", "http://2130706433:6080", false}, // decimal IP is not a loopback spelling
+		{"localhost:6080", "ws://localhost:6080", false},     // bad scheme
 	}
 	for _, c := range cases {
 		if got := originAllowed(c.host, c.origin); got != c.want {
 			t.Errorf("originAllowed(%q,%q)=%v want %v", c.host, c.origin, got, c.want)
 		}
+	}
+}
+
+func TestHostAllowList(t *testing.T) {
+	// Empty by default: LAN host refused even with matching Origin.
+	t.Setenv("WSBRIDGE_ALLOW_HOST", "")
+	if hostAllowed("192.168.1.5:6080") {
+		t.Fatal("empty allow-list must not allow LAN IP")
+	}
+	if originAllowed("192.168.1.5:6080", "http://192.168.1.5:6080") {
+		t.Fatal("empty allow-list must refuse LAN Host+Origin")
+	}
+	// Exact host:port entry permits exactly that host.
+	t.Setenv("WSBRIDGE_ALLOW_HOST", "192.168.1.5:6080")
+	if !hostAllowed("192.168.1.5:6080") {
+		t.Fatal("allow-list host:port should permit")
+	}
+	if !originAllowed("192.168.1.5:6080", "http://192.168.1.5:6080") {
+		t.Fatal("allow-list host:port should permit matching Origin")
+	}
+	if hostAllowed("192.168.1.6:6080") {
+		t.Fatal("allow-list must not permit other hosts")
+	}
+	if hostAllowed("192.168.1.5:9999") {
+		t.Fatal("host:port entry must not permit other ports")
+	}
+	if originAllowed("192.168.1.5:6080", "http://evil.example:6080") {
+		t.Fatal("allow-list Host still requires Origin match")
+	}
+	// Bare hostname allows any port; multiple entries comma-separated.
+	t.Setenv("WSBRIDGE_ALLOW_HOST", "myhost, 192.168.1.5:6080")
+	if !hostAllowed("myhost:6080") || !hostAllowed("myhost:9999") {
+		t.Fatal("bare hostname should allow any port")
+	}
+	if hostAllowed("other:6080") {
+		t.Fatal("allow-list must not permit unlisted hosts")
+	}
+	// Loopback passes at any port (Docker -p mapping, ssh -L local port).
+	if !hostAllowed("localhost:9999") {
+		t.Fatal("loopback must pass at any port (port mapping)")
+	}
+	// Loopback still works with a list set.
+	if !hostAllowed("localhost:6080") {
+		t.Fatal("loopback must pass regardless of allow-list")
 	}
 }
 
@@ -179,6 +236,10 @@ func TestReadFrameRejects(t *testing.T) {
 	}
 }
 
+func wsConnFor(c net.Conn) *wsConn {
+	return &wsConn{conn: c, mu: &sync.Mutex{}}
+}
+
 func TestReadMessageReassemblyAndCap(t *testing.T) {
 	var mask [4]byte
 	// Fragmented message reassembles.
@@ -190,7 +251,7 @@ func TestReadMessageReassemblyAndCap(t *testing.T) {
 		_, _ = c2.Write(frameBytes(true, 0x0, []byte("lo"), mask, 0))
 	}()
 	_ = c1.SetReadDeadline(time.Now().Add(5 * time.Second))
-	op, msg, code, err := readMessage(c1)
+	op, msg, code, err := readMessage(wsConnFor(c1))
 	if err != nil || code != 0 || op != 0x2 || string(msg) != "hello" {
 		t.Fatalf("reassembly: %v %v %q %v", op, code, msg, err)
 	}
@@ -208,10 +269,153 @@ func TestReadMessageReassemblyAndCap(t *testing.T) {
 	}()
 	_ = c3.SetReadDeadline(time.Now().Add(5 * time.Second))
 	_ = c3.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	op, msg, _, err = readMessage(c3)
+	op, msg, _, err = readMessage(wsConnFor(c3))
 	if err != nil || op != 0x2 || string(msg) != "d" {
 		t.Fatalf("ping-inline: %v %q %v", op, msg, err)
 	}
+}
+
+func TestEncodeFrameHeaderRejectsBeyond32Bits(t *testing.T) {
+	if _, err := encodeFrameHeader(0x2, 0xFFFFFFFF); err != nil {
+		t.Fatalf("max 32-bit length must encode, got %v", err)
+	}
+	if _, err := encodeFrameHeader(0x2, 0x100000000); !errors.Is(err, errTooLarge) {
+		t.Fatalf("length beyond 32 bits must be rejected, got %v", err)
+	}
+	// Small lengths still encode correctly.
+	hdr, err := encodeFrameHeader(0x2, 5)
+	if err != nil || len(hdr) != 2 || hdr[0] != 0x82 || hdr[1] != 5 {
+		t.Fatalf("short header wrong: %x %v", hdr, err)
+	}
+}
+
+// TestConcurrentWritesNoInterleave proves pong replies share the write
+// mutex with server data: client pings racing server data frames must
+// not interleave bytes. Against the pre-fix code (pong via raw writeFrame)
+// the strict parser sees corrupt frames and this FAILS; after the fix it
+// passes, including under -race.
+func TestConcurrentWritesNoInterleave(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := wsConnFor(server)
+	const nRounds = 50
+	const nData = 50
+	dataPayload := bytes.Repeat([]byte{0xAB}, 2048)
+	var mask [4]byte
+	mask = [4]byte{1, 2, 3, 4}
+
+	// Server data writer: nData binary frames via the serialized writer.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < nData; i++ {
+			if err := c.writeFrame(0x2, dataPayload); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Server reader: nRounds readMessage calls, each handling one ping
+	// (pong reply) plus one data message. Every pong must go through
+	// the mutex to avoid racing the data writer above.
+	type rmRes struct {
+		op  byte
+		msg []byte
+		err error
+	}
+	rmCh := make(chan rmRes, nRounds)
+	go func() {
+		for i := 0; i < nRounds; i++ {
+			op, msg, _, err := readMessage(c)
+			rmCh <- rmRes{op, msg, err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	// Client writer: nRounds masked pings, each followed by a masked
+	// data message so each readMessage returns once.
+	go func() {
+		for i := 0; i < nRounds; i++ {
+			_, _ = client.Write(frameBytes(true, 0x9, []byte("P"), mask, 0))
+			_, _ = client.Write(frameBytes(true, 0x2, []byte("hello"), mask, 0))
+		}
+	}()
+
+	// Client strict parser: nData data frames + nRounds pongs, all intact.
+	_ = client.SetReadDeadline(time.Now().Add(20 * time.Second))
+	_ = client.SetWriteDeadline(time.Now().Add(20 * time.Second))
+	pongSeen, dataSeen := 0, 0
+	for i := 0; i < nData+nRounds; i++ {
+		var hdr [2]byte
+		if _, err := io.ReadFull(client, hdr[:]); err != nil {
+			t.Fatalf("frame %d hdr: %v", i, err)
+		}
+		if hdr[0]&0x80 == 0 {
+			t.Fatalf("frame %d not final: %x", i, hdr[0])
+		}
+		op := hdr[0] & 0x0F
+		if hdr[1]&0x80 != 0 {
+			t.Fatalf("frame %d: server must not mask", i)
+		}
+		n := int(hdr[1] & 0x7F)
+		if n == 126 {
+			var ext [2]byte
+			if _, err := io.ReadFull(client, ext[:]); err != nil {
+				t.Fatalf("frame %d ext: %v", i, err)
+			}
+			n = int(ext[0])<<8 | int(ext[1])
+		} else if n == 127 {
+			var ext [8]byte
+			if _, err := io.ReadFull(client, ext[:]); err != nil {
+				t.Fatalf("frame %d ext64: %v", i, err)
+			}
+			var v uint64
+			for _, b := range ext {
+				v = v<<8 | uint64(b)
+			}
+			if v > 1<<20 {
+				t.Fatalf("frame %d absurd len %d", i, v)
+			}
+			n = int(v)
+		}
+		payload := make([]byte, n)
+		if _, err := io.ReadFull(client, payload); err != nil {
+			t.Fatalf("frame %d payload: %v", i, err)
+		}
+		switch op {
+		case 0xA:
+			if string(payload) != "P" {
+				t.Fatalf("pong corrupt at frame %d: %q", i, payload)
+			}
+			pongSeen++
+		case 0x2:
+			if len(payload) != 2048 {
+				t.Fatalf("data len corrupt at frame %d: %d", i, len(payload))
+			}
+			for _, b := range payload {
+				if b != 0xAB {
+					t.Fatalf("data bytes interleaved with pong at frame %d", i)
+				}
+			}
+			dataSeen++
+		default:
+			t.Fatalf("unexpected op %x at frame %d", op, i)
+		}
+	}
+	if pongSeen != nRounds || dataSeen != nData {
+		t.Fatalf("want %d pongs + %d data, got %d + %d", nRounds, nData, pongSeen, dataSeen)
+	}
+	for i := 0; i < nRounds; i++ {
+		r := <-rmCh
+		if r.err != nil || r.op != 0x2 || string(r.msg) != "hello" {
+			t.Fatalf("readMessage %d: op=%x msg=%q err=%v", i, r.op, r.msg, r.err)
+		}
+	}
+	wg.Wait()
 }
 
 func TestParseHeaderFuzzSeed(t *testing.T) {

@@ -16,18 +16,24 @@
 // Hardening (loopback-grade, hostile-input safe):
 //   - Frame payloads are capped at maxFramePayload (close 1009 on excess);
 //     reassembled messages are capped at maxMessageBytes (close 1009).
+//     A paste above 1 MiB therefore drops the connection; reconnect
+//     recovers.
 //   - Client frames MUST be masked (RFC 6455 5.1); unmasked -> close 1002.
 //   - Sec-WebSocket-Version must be 13, else 426.
 //   - RSV1/2/3 must be zero (else close 1002); unknown opcodes -> close 1003.
 //   - Control frames must be final with payload <= 125 (else 1002).
-//   - Same-origin check on the upgrade: requests with no Origin header are
-//     allowed (non-browser clients such as scripted tests send none);
-//     requests carrying an Origin are allowed only when the origin equals
-//     the request's own Host or is a loopback spelling (localhost,
-//     127.0.0.1, ::1) at the same port. Anything else gets 403 and never
-//     reaches the handshake.
+//   - Host pin + same-origin check on the upgrade: the request Host must
+//     be a loopback spelling (localhost, 127.0.0.1, ::1, any port) or be
+//     named in WSBRIDGE_ALLOW_HOST (comma-separated
+//     host[:port], empty by default), otherwise 403; requests with no
+//     Origin header are allowed (non-browser clients send none); requests
+//     carrying an Origin are allowed only when the origin equals the
+//     request's own Host or is a loopback spelling at the same port.
+//     Anything else gets 403 and never reaches the handshake. LAN-IP or
+//     custom-hostname access requires WSBRIDGE_ALLOW_HOST.
 //   - http.Server sets ReadHeaderTimeout; every hijacked connection gets a
-//     read deadline refreshed on each frame plus a server ping keepalive
+//     read deadline refreshed on every frame received (ping/pong/
+//     continuation included) plus a server ping keepalive
 //     (browsers answer pings automatically, so an idle noVNC session stays
 //     up); writes carry a short deadline. At most maxConns proxied
 //     connections exist at once (excess gets 503).
@@ -45,6 +51,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -121,13 +128,31 @@ func hasToken(header, token string) bool {
 	return false
 }
 
-// originAllowed enforces the same-origin policy for the upgrade.
-// Empty Origin (non-browser clients: scripted tests, websockify-style
-// tools) is allowed. The literal "null" (sandboxed file:// pages) is
-// rejected. Otherwise the origin must equal the request's own Host
-// (same host and port) or be a loopback spelling (localhost, 127.0.0.1,
-// ::1) at the same port as the request.
+// originAllowed enforces the upgrade policy for the WebSocket handshake.
+// It is the combination of two conditions, both required:
+//
+//  1. Host pin (DNS-rebinding defense): the request's own Host must be a
+//     loopback spelling (localhost, 127.0.0.1, ::1, any port -- the Host
+//     port may be a Docker-mapped or ssh-forwarded port) or be named in
+//     WSBRIDGE_ALLOW_HOST (comma-separated host[:port], empty by default).
+//     A rebound name such as evil.com (Host: evil.com:6080) is rejected
+//     here even when Origin parrots it.
+//  2. Origin match: empty Origin (non-browser clients) is allowed; the
+//     literal "null" is rejected; otherwise the origin must equal the
+//     request's own Host (same host and port) or be a loopback spelling
+//     at the same port.
+//
+// Static files (plain HTTP) deliberately carry no Host pin: the noVNC tree
+// holds no credentials or state-changing GETs, so serving it to a rebound
+// host is harmless, while pinning it would break non-browser health checks
+// without security benefit. The WebSocket upgrade is the enforcement point.
 func originAllowed(reqHost, origin string) bool {
+	return hostAllowed(reqHost) && originMatchesHost(reqHost, origin)
+}
+
+// originMatchesHost is the pure Origin == Host (or loopback spelling)
+// half of the policy, without the Host pin.
+func originMatchesHost(reqHost, origin string) bool {
 	if origin == "" {
 		return true
 	}
@@ -180,6 +205,67 @@ func splitHostPort(hostport string) (string, string) {
 	return strings.Trim(hostport, "[]"), ""
 }
 
+// allowList parses WSBRIDGE_ALLOW_HOST (comma-separated host[:port],
+// empty by default) into entries. A bare hostname allows any port;
+// a host:port entry requires that exact port.
+func allowList() []string {
+	v := os.Getenv("WSBRIDGE_ALLOW_HOST")
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	var out []string
+	for _, e := range strings.Split(v, ",") {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func normHost(h string) string {
+	return strings.ToLower(strings.Trim(h, "[]"))
+}
+
+// hostAllowed pins the served Host against DNS rebinding: any loopback
+// spelling (localhost, 127.0.0.1, ::1) passes regardless of port -- the
+// port in Host may be the Docker-mapped host port (e.g. -p 6081:6080) or
+// an ssh -L local port, while the served port inside is 6080, and both
+// are still loopback. Origin == Host port equality (checked separately)
+// still enforces same-origin including the port. Any non-loopback Host
+// must be named in WSBRIDGE_ALLOW_HOST. A rebound evil.com whose Host
+// happens to match its Origin therefore fails.
+func hostAllowed(reqHost string) bool {
+	reqName, reqPort := splitHostPort(reqHost)
+	reqName = normHost(reqName)
+	if reqPort == "" {
+		reqPort = "80"
+	}
+	if isLoopbackName(reqName) {
+		return true
+	}
+	for _, e := range allowList() {
+		an, ap := splitHostPort(e)
+		an = normHost(an)
+		if an == "" {
+			continue
+		}
+		if ap == "" {
+			if an == reqName {
+				return true
+			}
+		} else if an == reqName && ap == reqPort {
+			return true
+		}
+	}
+	return false
+}
+
+// hostRejectLogged ensures the WSBRIDGE_ALLOW_HOST hint is logged once,
+// not per rejected attempt (log-spam discipline).
+var hostRejectLogged sync.Once
+
 // proxyWS performs the server side of the RFC 6455 opening handshake, then
 // splices the connection to the TCP target in both directions.
 func proxyWS(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +274,14 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected Sec-WebSocket-Version: 13", http.StatusUpgradeRequired)
 		return
 	}
-	if !originAllowed(r.Host, r.Header.Get("Origin")) {
+	if !hostAllowed(r.Host) {
+		hostRejectLogged.Do(func() {
+			log.Printf("wsbridge: rejected Host %q (not loopback; set WSBRIDGE_ALLOW_HOST=host[:port] to allow LAN/hostname access)", r.Host)
+		})
+		http.Error(w, "host not allowed (set WSBRIDGE_ALLOW_HOST to allow this host)", http.StatusForbidden)
+		return
+	}
+	if !originMatchesHost(r.Host, r.Header.Get("Origin")) {
 		http.Error(w, "foreign origin", http.StatusForbidden)
 		return
 	}
@@ -243,18 +336,18 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	c := &wsConn{conn: conn, mu: &sync.Mutex{}}
 	backend, err := net.DialTimeout("tcp", *targetAddr, 10*time.Second)
 	if err != nil {
 		// 101 already sent; report via a close frame with 1014 (bad
 		// gateway) and drop. The noVNC client surfaces this as a failed
 		// connect, same as websockify refusing the target.
-		_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-		writeFrame(conn, 0x8, []byte{0x03, 0xF6})
+		// Single writer here (no goroutines yet), still routed through
+		// the serialized writer so every post-handshake write shares it.
+		_ = c.writeFrame(0x8, []byte{0x03, 0xF6})
 		conn.Close()
 		return
 	}
-
-	c := &wsConn{conn: conn, mu: &sync.Mutex{}}
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -305,6 +398,9 @@ func (c *wsConn) writeClose(code uint16, reason string) {
 
 // wsToTCP runs on the calling goroutine: parse client frames, forward binary
 // payloads to the backend. Returns when either side is done.
+// The read deadline is refreshed on every frame inside readMessage
+// (ping/pong/continuation included), so an idle session kept alive by
+// server pings never trips the deadline.
 func wsToTCP(c *wsConn, backend net.Conn, done chan struct{}) {
 	defer c.conn.Close()
 	defer backend.Close()
@@ -314,8 +410,7 @@ func wsToTCP(c *wsConn, backend net.Conn, done chan struct{}) {
 			return
 		default:
 		}
-		_ = c.conn.SetReadDeadline(time.Now().Add(readTimeout))
-		op, payload, code, err := readMessage(c.conn)
+		op, payload, code, err := readMessage(c)
 		if err != nil {
 			if code != 0 {
 				c.writeClose(code, "")
@@ -390,12 +485,18 @@ var (
 // and answering pings inline. Returns the data opcode (0x1/0x2, or 0x8 for
 // close), the full payload, and a close code (0 when the error is a plain
 // I/O failure that needs no close frame).
-func readMessage(conn net.Conn) (byte, []byte, uint16, error) {
+// All writes (pong replies here; data/ping/close via wsConn elsewhere)
+// go through the serialized writer, so a client ping racing server data
+// cannot interleave frame bytes. The read deadline is refreshed on every
+// frame received, so server pings answered by the browser keep an
+// otherwise-idle session alive past readTimeout.
+func readMessage(c *wsConn) (byte, []byte, uint16, error) {
 	var msg []byte
 	var msgOp byte
 	inMsg := false
 	for {
-		fin, op, payload, code, err := readFrame(conn)
+		_ = c.conn.SetReadDeadline(time.Now().Add(readTimeout))
+		fin, op, payload, code, err := readFrame(c.conn)
 		if err != nil {
 			return 0, nil, code, err
 		}
@@ -403,8 +504,7 @@ func readMessage(conn net.Conn) (byte, []byte, uint16, error) {
 		case 0x8: // close
 			return op, payload, 0, nil
 		case 0x9: // ping: pong with same body, keep reading
-			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			_ = writeFrame(conn, 0xA, payload)
+			_ = c.writeFrame(0xA, payload)
 		case 0xA: // pong: ignore
 		case 0x1, 0x2: // data frame starts a message
 			if inMsg {
@@ -511,23 +611,13 @@ func parseFrameHeader(data []byte) (frameHeader, error) {
 	return fh, nil
 }
 
-func closeCodeFor(err error) uint16 {
-	switch {
-	case errors.Is(err, errTooLarge):
-		return 1009
-	case errors.Is(err, errBadOp):
-		return 1003
-	case errors.Is(err, errProtocol):
-		return 1002
-	default:
-		return 0
-	}
-}
-
 // readFrame parses one RFC 6455 frame. Returns final flag, opcode and
 // (unmasked) payload, plus a close code (0 when no close frame applies).
 // Every malformed packet maps to a short error and a close code; nothing
 // here panics or logs a stack trace regardless of wire bytes.
+// Length checks run before any payload allocation, so size lies never
+// allocate. The pure parseFrameHeader above mirrors these checks for
+// fuzzing; readFrame itself performs them inline exactly once.
 func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
 	var base [2]byte
 	if _, err := io.ReadFull(conn, base[:]); err != nil {
@@ -548,21 +638,18 @@ func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
 		return false, 0, nil, 1002, errProtocol
 	}
 	n := uint64(base[1] & 0x7F)
-	header := append([]byte{base[0], base[1]}, make([]byte, 0, 12)...)
 	switch n {
 	case 126:
 		var ext [2]byte
 		if _, err := io.ReadFull(conn, ext[:]); err != nil {
 			return false, 0, nil, 0, err
 		}
-		header = append(header, ext[:]...)
 		n = uint64(ext[0])<<8 | uint64(ext[1])
 	case 127:
 		var ext [8]byte
 		if _, err := io.ReadFull(conn, ext[:]); err != nil {
 			return false, 0, nil, 0, err
 		}
-		header = append(header, ext[:]...)
 		n = 0
 		for _, b := range ext {
 			n = n<<8 | uint64(b)
@@ -571,19 +658,6 @@ func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
 			return false, 0, nil, 1009, errTooLarge
 		}
 	}
-	// Re-validate the assembled header through the pure parser so the
-	// fuzzed code path and the live path agree.
-	full := append(header, 0, 0, 0, 0) // placeholder key bytes
-	fh, perr := parseFrameHeader(full)
-	if perr != nil {
-		if errors.Is(perr, io.ErrUnexpectedEOF) {
-			// Header claimed ext bytes we already consumed; treat as
-			// a real parse of the length fields below.
-		} else {
-			return false, 0, nil, closeCodeFor(perr), perr
-		}
-	}
-	_ = fh
 	op := b0 & 0x0F
 	fin := b0&0x80 != 0
 	isControl := op >= 0x8
@@ -603,9 +677,6 @@ func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
 	if _, err := io.ReadFull(conn, mask[:]); err != nil {
 		return false, 0, nil, 0, err
 	}
-	if n > uint64(maxFramePayload) && !isControl {
-		return false, 0, nil, 1009, errTooLarge
-	}
 	payload := make([]byte, n)
 	if _, err := io.ReadFull(conn, payload); err != nil {
 		return false, 0, nil, 0, err
@@ -616,9 +687,13 @@ func readFrame(conn net.Conn) (bool, byte, []byte, uint16, error) {
 	return fin, op, payload, 0, nil
 }
 
-// writeFrame emits one server-to-client (unmasked) frame.
-func writeFrame(conn net.Conn, op byte, payload []byte) error {
-	n := len(payload)
+// encodeFrameHeader builds the server-to-client header for a payload of
+// length n. Lengths beyond 32 bits are rejected (not truncated): the
+// 64-bit encoding carries only a 32-bit value in its low half.
+func encodeFrameHeader(op byte, n uint64) ([]byte, error) {
+	if n > 0xFFFFFFFF {
+		return nil, errTooLarge
+	}
 	var hdr []byte
 	hdr = append(hdr, 0x80|op)
 	switch {
@@ -629,12 +704,22 @@ func writeFrame(conn net.Conn, op byte, payload []byte) error {
 	default:
 		hdr = append(hdr, 127, 0, 0, 0, 0, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 	}
+	return hdr, nil
+}
+
+// writeFrame emits one server-to-client (unmasked) frame.
+func writeFrame(conn net.Conn, op byte, payload []byte) error {
+	n := uint64(len(payload))
+	hdr, err := encodeFrameHeader(op, n)
+	if err != nil {
+		return err
+	}
 	if _, err := conn.Write(hdr); err != nil {
 		return err
 	}
 	if n == 0 {
 		return nil
 	}
-	_, err := conn.Write(payload)
+	_, err = conn.Write(payload)
 	return err
 }
