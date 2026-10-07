@@ -1,6 +1,19 @@
 #!/bin/bash
 # wayvnc against scoot's headless socket, as abc.
-# Default: localhost-only, port 5900, no auth. Browser path uses in-container noVNC.
+#
+# Security posture (see docs/security.md):
+# - No password: OPEN mode. VNC binds $VNC_LISTEN (default localhost) and any
+#   client that can reach it gets the desktop with no login. Keep it on
+#   loopback (or tunnel over ssh) unless you know what you are doing.
+# - VNC_PASSWORD set: AUTHENTICATED mode. The service writes a wayvnc config
+#   with password auth plus freshly generated RSA-AES and VeNCrypt (TLS) keys,
+#   persisted in /config so restarts keep the same server identity. The DES
+#   fallback stays on (relax_encryption + allow_broken_crypto) because the
+#   noVNC browser client and macOS Screen Sharing only speak the DES
+#   challenge-response -- which uses the first 8 password characters and
+#   encrypts nothing. On an untrusted network, tunnel over SSH regardless.
+set -u
+
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
 echo "[wayvnc] waiting for $RUNTIME/scoot-display"
 until [ -f "$RUNTIME/scoot-display" ]; do sleep 0.5; done
@@ -9,13 +22,64 @@ echo "[wayvnc] display $NAME; waiting for socket"
 until [ -S "$RUNTIME/$NAME" ]; do sleep 0.5; done
 
 LISTEN="${VNC_LISTEN:-localhost}"
+PORT="${VNC_PORT:-5900}"
 FPS="${VNC_FPS:-30}"
 ARGS=(-f "$FPS")
 [ -n "${VNC_KEYBOARD:-}" ] && ARGS+=(-k "$VNC_KEYBOARD")
 
-if [ -n "${VNC_PASSWORD:-}" ]; then
-  echo "[wayvnc] VNC_PASSWORD is set: password auth is not yet wired in this minimal image; starting without auth on $LISTEN (loopback by default). Set VNC_LISTEN=127.0.0.1 and keep the port on loopback." >&2
+# wayvnc accepts "address:port" ([::]:port for IPv6); a bare VNC_LISTEN gets
+# :$VNC_PORT appended so the documented knob actually moves the listener.
+case "$LISTEN" in
+  *:*|*.sock) TARGET="$LISTEN" ;;
+  *) TARGET="$LISTEN:$PORT" ;;
+esac
+
+if [ -z "${VNC_PASSWORD:-}" ]; then
+  echo "[wayvnc] OPEN mode: no VNC_PASSWORD, NO AUTHENTICATION on $TARGET -- keep it on loopback (ssh -L) or set VNC_PASSWORD" >&2
+  echo "[wayvnc] capturing $NAME on $TARGET" >&2
+  exec s6-setuidgid abc env WAYLAND_DISPLAY="$NAME" XDG_RUNTIME_DIR="$RUNTIME" \
+    wayvnc "${ARGS[@]}" "$TARGET"
 fi
-echo "[wayvnc] capturing $NAME on $LISTEN" >&2
-exec s6-setuidgid abc env WAYLAND_DISPLAY="$NAME" XDG_RUNTIME_DIR="$RUNTIME" \
-  wayvnc "${ARGS[@]}" "$LISTEN"
+
+# AUTHENTICATED mode: password auth via a generated wayvnc config.
+#
+# Why no TLS/RSA keys here (measured, not assumed): wayvnc's VeNCrypt path
+# (type 19) is unusable by the noVNC browser client -- neatvnc answers the
+# 0.2 version exchange with 0 (noVNC expects 1) and then offers only the
+# X509 subtype, which noVNC cannot speak, so the browser dies with "Failed
+# to connect" before any password prompt. With no TLS credentials
+# configured, the server instead offers [UnixLogon, RA2, ARD(30), VNCAuth(2)]
+# (see a live handshake in the tsfix report): noVNC picks Apple-DH (30) and
+# prompts for the password, classic native clients pick DES (2), macOS
+# Screen Sharing picks ARD -- and the noVNC browser path was proven
+# end-to-end with headless Chromium (password prompt -> desktop).
+# Neither path encrypts (relax_encryption + allow_broken_crypto, and DES
+# uses the first 8 password characters), so the password is loopback-grade:
+# tunnel over SSH on untrusted networks.
+HOMEDIR="${HOME:-/config}"
+WVNCDIR="$HOMEDIR/.config/wayvnc"
+mkdir -p "$WVNCDIR"
+chmod 700 "$WVNCDIR"
+
+UMASK_OLD="$(umask)"; umask 077
+cat > "$WVNCDIR/config" <<CFG
+address=$LISTEN
+port=$PORT
+enable_auth=true
+username=${VNC_USER:-}
+password=$VNC_PASSWORD
+relax_encryption=true
+allow_broken_crypto=true
+CFG
+umask "$UMASK_OLD"
+chmod 600 "$WVNCDIR/config"
+# This script runs as root but wayvnc runs as abc: hand the file over.
+chown -R abc:abc "$WVNCDIR"
+chmod 700 "$WVNCDIR"
+chmod 600 "$WVNCDIR/config"
+
+echo "[wayvnc] AUTHENTICATED mode: password set (user ${VNC_USER:-<empty>}); browser auth via Apple-DH, native via DES -- no encryption, tunnel over SSH on untrusted networks" >&2
+ARGS+=(-C "$WVNCDIR/config")
+echo "[wayvnc] capturing $NAME on $LISTEN:$PORT with auth" >&2
+exec s6-setuidgid abc env WAYLAND_DISPLAY="$NAME" XDG_RUNTIME_DIR="$RUNTIME" HOME="$HOMEDIR" \
+  wayvnc "${ARGS[@]}"

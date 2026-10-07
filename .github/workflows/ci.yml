@@ -9,6 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          # Read-only binary cache for scoot packages (same values as the
+          # nixConfig in github:scoot-sh/scoot). flake-level nixConfig alone
+          # is NOT enough here: it applies only to trusted users, and the
+          # runner user is not one until the installer marks it -- so the
+          # substituter is set in the system nix.conf instead, which needs no
+          # prompt and works for untrusted users too. No write token lives
+          # here: pushing to the cache is a maintainer job (see README).
+          extra-conf: |
+            extra-substituters = https://scoot-sh.cachix.org
+            extra-trusted-public-keys = scoot-sh.cachix.org-1:QMj7CMw8uqZxrvqqm6SggdxTHz6Q4prt30ydDcXJXCo=
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           upstream-cache: https://cache.nixos.org
@@ -25,12 +36,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://scoot-sh.cachix.org
+            extra-trusted-public-keys = scoot-sh.cachix.org-1:QMj7CMw8uqZxrvqqm6SggdxTHz6Q4prt30ydDcXJXCo=
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           upstream-cache: https://cache.nixos.org
       - run: nix build .#image-try-scoot --print-build-logs
   push:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # main pushes AND same-repo PR pushes. PRs from forks are excluded by the
+    # full_name guard: their GITHUB_TOKEN cannot write this repo's packages,
+    # so attempting the push would only fail. Same-repo PRs get
+    # pr-<N>-<shortsha> per-arch tags so the ghcr.io one-liner is testable
+    # before merge; :latest still tracks main only.
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     needs: [check, build]
     strategy:
       matrix:
@@ -46,6 +69,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://scoot-sh.cachix.org
+            extra-trusted-public-keys = scoot-sh.cachix.org-1:QMj7CMw8uqZxrvqqm6SggdxTHz6Q4prt30ydDcXJXCo=
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           upstream-cache: https://cache.nixos.org
@@ -55,11 +82,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            shortsha="${{ github.event.pull_request.head.sha }}"
+            shortsha="${shortsha:0:7}"
+            TAG="pr-${{ github.event.number }}-${shortsha}"
+          else
+            TAG="${{ matrix.system }}"
+          fi
           nix build .#image-try-scoot --print-build-logs
           out=$(nix build .#image-try-scoot --no-link --print-out-paths)
           docker load < $out
-          docker tag try-scoot:latest ghcr.io/scoot-sh/try-scoot:${{ matrix.system }}
-          docker push ghcr.io/scoot-sh/try-scoot:${{ matrix.system }}
+          docker tag try-scoot:latest "ghcr.io/scoot-sh/try-scoot:${TAG}"
+          docker push "ghcr.io/scoot-sh/try-scoot:${TAG}"
+          echo "pushed ghcr.io/scoot-sh/try-scoot:${TAG}"
   manifest:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [push]

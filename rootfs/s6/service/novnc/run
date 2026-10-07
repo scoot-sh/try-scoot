@@ -1,6 +1,10 @@
 #!/bin/bash
 # noVNC in front of wayvnc, as abc: websockify proxy + static file server.
 # Browser at http://host:6080/ lands on the desktop with no client install.
+# Auth (when VNC_PASSWORD is set) happens end-to-end at the RFB layer inside
+# the proxied stream: noVNC prompts for the password, websockify never sees
+# it. The dial target honors VNC_PORT so the browser path tracks the wayvnc
+# listener (see ../wayvnc/run).
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
 PORT="${NOVNC_PORT:-6080}"
 LISTEN="${NOVNC_LISTEN:-0.0.0.0}"
@@ -21,4 +25,4 @@ HTML
 fi
 
 echo "[novnc] http://$LISTEN:$PORT/ -> localhost:$VNC_PORT" >&2
-exec s6-setuidgid abc websockify --web "$WEBDIR" "$LISTEN:$PORT" "localhost:$VNC_PORT"
+exec s6-setuidgid abc wsbridge -web "$WEBDIR" -listen "$LISTEN:$PORT" -target "localhost:$VNC_PORT"
