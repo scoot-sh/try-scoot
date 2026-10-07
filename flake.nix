@@ -78,6 +78,27 @@
     formatter =
       nixpkgs.lib.genAttrs
       ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"]
-      (system: (import nixpkgs {inherit system;}).alejandra);
+      (system: let
+        p = import nixpkgs {inherit system;};
+      in
+        # Bare alejandra reads stdin when invoked with no path args, so
+        # `nix fmt -- --check` failed with "unexpected end of file" while the
+        # files themselves were clean. The wrapper defaults to the tree root
+        # when the caller names no path, so both `nix fmt` and
+        # `nix fmt -- --check` operate on `.`.
+        p.writeShellScriptBin "alejandra" ''
+          has_path=0
+          for a in "$@"; do
+            case "$a" in
+              -*) ;;
+              *) has_path=1; break ;;
+            esac
+          done
+          if [ "$has_path" = 0 ]; then
+            exec ${p.alejandra}/bin/alejandra "$@" .
+          else
+            exec ${p.alejandra}/bin/alejandra "$@"
+          fi
+        '');
   };
 }

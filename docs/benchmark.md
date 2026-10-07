@@ -5,12 +5,13 @@ images where stated.
 
 ## Pull size
 
-`docker images ghcr.io/scoot-sh/try-scoot` (compressed pull + unpacked).
-Per-step diet numbers live in docs/layers.md; the headline before/after is:
+Unpacked bytes throughout these docs mean `docker export` of the loaded
+image (flattened filesystem bytes). Per-step diet numbers live in
+docs/layers.md; the headline before/after is:
 
 | revision | tarball (pull) | unpacked (`docker export`, flattened) |
 |---|---|---|
-| `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB; `docker image inspect .Size`) |
+| `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB) |
 | this head (`7753542`+) | 185,474,953 B (176.9 MiB) | 593,991,680 B (566.4 MiB) |
 
 ## Time-to-first-frame

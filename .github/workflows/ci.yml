@@ -24,6 +24,7 @@ jobs:
         with:
           upstream-cache: https://cache.nixos.org
       - run: nix flake check
+      - run: nix fmt -- --check
   build:
     strategy:
       matrix:
@@ -48,8 +49,9 @@ jobs:
     # main pushes AND same-repo PR pushes. PRs from forks are excluded by the
     # full_name guard: their GITHUB_TOKEN cannot write this repo's packages,
     # so attempting the push would only fail. Same-repo PRs get
-    # pr-<N>-<shortsha> per-arch tags so the ghcr.io one-liner is testable
-    # before merge; :latest still tracks main only.
+    # pr-<N>-<shortsha>-<system> per-arch tags so the ghcr.io one-liner is
+    # testable before merge (each arch pushes its own suffixed tag, so the
+    # two jobs never clobber each other); :latest still tracks main only.
     if: >-
       (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
       (github.event_name == 'pull_request' &&
@@ -85,7 +87,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             shortsha="${{ github.event.pull_request.head.sha }}"
             shortsha="${shortsha:0:7}"
-            TAG="pr-${{ github.event.number }}-${shortsha}"
+            TAG="pr-${{ github.event.number }}-${shortsha}-${{ matrix.system }}"
           else
             TAG="${{ matrix.system }}"
           fi

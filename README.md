@@ -22,20 +22,26 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 Open `http://localhost:6080/`. The page forwards to the noVNC client
 (autoconnect, scale to window, reconnect). Native VNC clients use port 5900,
-which stays on container loopback unless you publish it.
+which binds container loopback by default: publishing it with
+`-p 5900:5900` alone is not enough (the listener stays on loopback, so the
+mapping accepts then EOFs) -- add `-e VNC_LISTEN=0.0.0.0` to reach it from
+outside the container.
 
 The one-liner above is the whole story: the image needs no `--shm-size`
 (the browser-side canvas lives in the *host* browser, and the container runs
 fine with the runtime default) and no named volume (a `/config` volume only
-matters if you want your edits and the wayvnc TLS/RSA keys to survive
-`--rm`; add `-v try-scoot-config:/config` for that).
+matters if you want your config edits to survive `--rm`;
+add `-v try-scoot-config:/config` for that).
 
 Size it with `VNC_WIDTH`/`VNC_HEIGHT` (default `1280x800`). `VNC_FPS`
 (default `30`) caps the capture rate. `VNC_KEYBOARD` picks a wayvnc keyboard
 layout. `VNC_LISTEN` (default `localhost`) and `VNC_PORT` (default `5900`)
 control the VNC listener -- both are honored: the wayvnc service listens on
-`$VNC_LISTEN:$VNC_PORT` and the in-container noVNC proxy dials
-`localhost:$VNC_PORT`, so the browser path tracks the knob. `NOVNC_LISTEN`
+`$VNC_LISTEN:$VNC_PORT` (a bare host gets `:$VNC_PORT` appended) and the
+in-container noVNC proxy dials the same target (`0.0.0.0` maps back to
+`localhost`; a `VNC_LISTEN` holding a unix socket path is unsupported and
+the browser service refuses to start loudly rather than dialing the wrong
+port). `NOVNC_LISTEN`
 (default `0.0.0.0`) and `NOVNC_PORT` (default `6080`) control the browser
 port.
 
@@ -97,8 +103,8 @@ third-party images). See docs/ for layers, measurements, and the Selkies
 packaging decision.
 
 CI pushes per-arch tags on every `main` push (`:x86_64-linux`,
-`:aarch64-linux`, combined into `:latest`) and `pr-<N>-<shortsha>` per-arch
-tags on pull requests from this repo, so the `ghcr.io/…` one-liner is
+`:aarch64-linux`, combined into `:latest`) and `pr-<N>-<shortsha>-<system>`
+per-arch tags on pull requests from this repo, so the `ghcr.io/…` one-liner is
 testable before merge. Note: this repo is private for now, so the GHCR
 package is private by default -- the maintainer must flip package visibility
 to public for "anyone can paste". Builds read the `scoot-sh` Cachix cache

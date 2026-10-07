@@ -32,7 +32,9 @@ Headline after 1-5 (+openssl, +pin align): pull 596.0 MiB -> 176.9 MiB
 554.6 MiB. Target (halve the pull) beaten by 2.3x.
 
 Method: root-env closure via `nix path-info --closure-size`; tarball bytes
-via `ls -l` on the built store tarball; unpacked via `docker image inspect
-.Size`; idle CPU/RAM via `docker stats` with a viewer attached after a 30 s
+via `ls -l` on the built store tarball; unpacked via `docker export` (the
+`docker image inspect .Size` field double-counts shared layers on some
+engines -- 2.25 GB reported for a 594 MB export -- so it is not used);
+idle CPU/RAM via `docker stats` with a viewer attached after a 30 s
 settle. `scoot` itself is 7 MB (stripped -- no debug-symbols problem);
 `dejavu_fonts`/`tzdata`/`adwaita` are single-digit-to-tens MB, not the fight.
