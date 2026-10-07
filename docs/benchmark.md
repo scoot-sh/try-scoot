@@ -38,6 +38,18 @@ almost nothing on a static screen (same shape as the reference
 Selkies 5.0% / 11.1 kB/s holding a static screen -- methodology differs, see
 docs/layers.md).
 
+## Selkies variant (`:selkies`)
+
+Same method, Mac Docker Desktop (arm64) runs of M2-built images; full
+tables in docs/selkies.md. Pull: L0 494,739,938 B (471.8 MiB), full
+514,428,977 B (490.6 MiB) vs 185,474,953 B (176.9 MiB) for the default
+tag. Unpacked (`docker export`): L0 1,691,484,160 B, full 1,753,701,888
+B vs 593,991,680 B. Run to stream (full tag): HTTP 200 at 1.05 s, first
+client settings applied (1280x800 h264enc) at 1.6 s, painted desktop in a
+persistent headless-Chromium connection (screenshots). Idle: full 0.26% /
+119.2 MiB without a viewer, 0.19% / 123.9 MiB with a viewer on a static
+screen; L0 0.18% / 71.7 MiB.
+
 ## Input truth (binds ON)
 
 With scoot `b11eb8c` (contains #494) and the image's `[virtual_input]

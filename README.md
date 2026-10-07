@@ -123,6 +123,34 @@ matters more, not less. WebRTC is not used here, so there are no UDP ports,
 STUN/TURN servers, or host-networking needs: one TCP port carries the whole
 desktop.
 
+## Selkies variant (`:selkies`, experimental)
+
+A second, opt-in image streams the same desktop through Selkies (software
+H.264 + audio) instead of VNC. The one-liner above stays the default; this
+is the clearly labeled second option:
+
+```sh
+docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
+# open http://localhost:8080/
+```
+
+Trade-offs, measured (see docs/selkies.md for method): ~491 MiB pull and
+~1.63 GiB unpacked (vs ~177 MiB / ~566 MiB for this tag), ~0.2% / ~120
+MiB idle (vs ~0% / ~43 MiB), `docker run` to painted desktop ~2 s in a
+browser. What you gain is audio (VNC has none) and H.264 motion
+efficiency; what you pay is a bigger image (the GL + Python + PulseAudio
+stack the VNC tag deleted on purpose), a busier idle (a software x264
+encode never quite sleeps), and a second port family if you switch it to
+WebRTC mode. With no password set the
+login is off, so keep the port on loopback exactly as with the default
+tag; `-e SELKIES_BASIC_AUTH_PASSWORD='...'` turns the login on
+(fail-closed: a set password never starts open; a wrong one gets 401).
+Input behaves like the default tag: typing and pointing arrive over the
+virtual keyboard, compositor chords never fire from remote input (same
+forward-only filter, same protocol), so agents drive chords via `scoot msg
+key` / `scoot msg pointer`. Full posture, modes, and packaging notes in
+docs/selkies.md.
+
 ## Build
 
 With Nix on Linux:
