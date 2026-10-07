@@ -152,6 +152,7 @@
     [output]
     [virtual_input]
     enabled = true
+    binds = true
 
     [wallpaper]
     ${lib.optionalString needBg ''        image = "/defaults/wallpaper.png"

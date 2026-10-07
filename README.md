@@ -48,20 +48,24 @@ port.
 Keys: `Alt+Return` / `Super+Return` / `Alt+t` / `Super+t` terminal, `Alt+d` /
 `Super+d` launcher, `Alt+q` / `Super+q` close, `Alt+h` / `Alt+l` (and the
 `Super` mirrors) move focus between columns. `Super` doubles every `Alt` bind
-because some browsers grab `Alt` chords -- inside a terminal prefer the
-`Super` binds (readline owns `Alt+d` and friends).
+because some browsers/OSes grab `Alt` chords (and some grab `Super`/Cmd) --
+inside a terminal prefer the `Super` binds (readline owns `Alt+d` and friends).
 
-Over VNC (browser or native client) only typing and pointing work: scoot
-deliberately never runs keybindings from virtual-keyboard input
-(forward-only filter in its `virtual_input` module -- a remote layout can
-disagree with the seat layout about what a key *is*, so intercepting would
-misbehave; window management stays local). Proven live with a scripted RFB
-client: plain typing, Shift/Ctrl chords, window-focus clicks and bar
-workspace clicks all arrive; `Alt+Return`/`Alt+d`/`Super+t` never fire, in a
-real headless browser identically. The binds themselves are registered and
-functional -- `scoot msg key alt+Return` from inside the container spawns a
-terminal -- so agents drive chords over `scoot msg key` / `scoot msg pointer`
-instead. Details and evidence in docs/benchmark.md.
+Remote chords fire: the image sets `[virtual_input] binds = true` (with
+`enabled = true`, restart-only -- see scoot `remote-desktop.md`), so
+virtual-keyboard keys run compositor binds, matched by translated seat
+keysym. Proven live with a scripted RFB client driving the wayvnc port and
+headless Chromium through noVNC: `Alt+Return` 1 -> 2 windows, `Super+Return`
+2 -> 3, `Alt+d` respawns fuzzel after a kill, `Alt+h` / `Alt+l` move focus
+(RFB 3 -> 2 -> 3; browser 4 -> 1 -> 2), typing still works (RFB
+`touch /tmp/vnctypeok` creates the file; browser `echo hello-browser`
+types). `scoot msg locked` was `false` for the proof; while locked, virtual
+motion/buttons/keys (including binds) are dropped and can never unlock.
+Browser-side limits remain: a browser/OS that grabs a chord never sends it,
+so click the canvas first and try the `Super` mirror when `Alt` is eaten.
+The fallback that always works is the control socket from inside the
+container: `docker exec -u abc -e XDG_RUNTIME_DIR=/run/user/911 <c> scoot msg key alt+Return`
+(and `scoot msg pointer`). Details and evidence in docs/benchmark.md.
 
 ## Ports and security
 
@@ -88,7 +92,12 @@ a listing the upgrade gets 403 (`host not allowed (set WSBRIDGE_ALLOW_HOST
 to allow this host)`) and the log names the variable once.
 
 `VNC_PASSWORD` enables wayvnc password auth (fail-closed: setting it always
-protects the port, never starts open). The service writes a wayvnc config
+protects the port, never starts open). With `[virtual_input] binds = true`,
+any remote client that can reach the VNC port can now also spawn programs and
+run compositor actions through binds (a terminal, the launcher) -- not just
+type and click -- so treat VNC reach as shell-equivalent and keep it on
+loopback or behind `ssh -L` unless the remote user owns the session. The
+service writes a wayvnc config
 with password auth; noVNC in a browser prompts for the password (proven
 end-to-end with headless Chromium: prompt -> desktop), classic native
 clients use DES, macOS Screen Sharing uses Apple-DH. Deliberately no TLS
@@ -106,7 +115,11 @@ Clipboard paste above 1 MiB drops the connection (1 MiB frame cap, close
 
 The container runs the session as non-root user `abc` (uid 911). The VNC
 port binds loopback only by default; the browser port is the only one the
-one-liner publishes. WebRTC is not used here, so there are no UDP ports,
+one-liner publishes. The one-liner's trust posture is unchanged by `binds`:
+loopback-only default with an optional `VNC_PASSWORD` (loopback-grade, tunnel
+over SSH on untrusted nets) -- what changes is only what VNC reach implies
+once it happens (binds can now spawn), which is why the loopback default
+matters more, not less. WebRTC is not used here, so there are no UDP ports,
 STUN/TURN servers, or host-networking needs: one TCP port carries the whole
 desktop.
 
