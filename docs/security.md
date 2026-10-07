@@ -41,18 +41,35 @@ rather than publishing the port.
   stays container-local. The WS->TCP bridge (`wsbridge`, a small static
   binary) only shovels bytes: it never sees the password, which is
   negotiated end-to-end at the RFB layer between noVNC and wayvnc.
-- `wsbridge` hardening: the upgrade carries a same-origin check -- requests
-  with no `Origin` header are allowed (non-browser clients such as scripted
-  tests send none); requests with an `Origin` are allowed only when it equals
-  the request's own Host or is a loopback spelling (`localhost`,
-  `127.0.0.1`, `::1`) at the same port, otherwise 403. Client frames must be
-  masked and `Sec-WebSocket-Version` must be 13 (else 426/1002); RSV bits and
-  fragmented/oversized control frames close with 1002, unknown opcodes with
-  1003, over-cap frames/messages (1 MiB frame, 4 MiB message) with 1009.
+- `wsbridge` hardening: the upgrade pins the served Host against DNS
+  rebinding and then checks Origin -- the request `Host` must be a loopback
+  spelling (`localhost`, `127.0.0.1`, `::1`, any port -- Docker-mapped and
+  ssh-forwarded ports keep working) or be named
+  in `WSBRIDGE_ALLOW_HOST` (comma-separated `host[:port]`, empty by default),
+  otherwise 403 (`host not allowed (set WSBRIDGE_ALLOW_HOST to allow this
+  host)`; the log names the variable once, not per attempt). Requests with
+  no `Origin` header are allowed (non-browser clients such as scripted tests
+  send none); requests with an `Origin` are allowed only when it equals the
+  request's own Host or is a loopback spelling at the same port, otherwise
+  403. Rebound `Host` + matching `Origin` is therefore refused. Plain HTTP
+  (the noVNC tree) carries no Host pin on purpose: it holds no credentials
+  or state-changing GETs, so serving it to a rebound host is harmless, while
+  pinning it would break non-browser health checks without security benefit;
+  the WebSocket upgrade is the enforcement point. Access by LAN IP or custom
+  hostname needs `-e WSBRIDGE_ALLOW_HOST=host[:port]` (bare hostname allows
+  any port). Client frames must be masked and `Sec-WebSocket-Version` must be
+  13 (else 426/1002); RSV bits and fragmented/oversized control frames close
+  with 1002, unknown opcodes with 1003, over-cap frames/messages (1 MiB
+  frame, 4 MiB message) with 1009 -- so a clipboard paste above 1 MiB drops
+  the connection and reconnect recovers. All server-to-client writes (data,
+  ping, pong, close) share one mutex, so a client ping racing server data
+  cannot interleave frame bytes.
   The server sets `ReadHeaderTimeout`, per-connection read (90 s, refreshed
-  on every frame) and write (10 s) deadlines with a 30 s ping keepalive
-  (browsers answer automatically, so idle noVNC sessions stay up), and caps
-  concurrent proxied connections at 32 (excess gets 503). Malformed input
-  yields at most one short log line, never a stack trace.
+  on every frame received -- ping/pong/continuation included, so server
+  pings answered by the browser keep an idle session alive) and write
+  (10 s) deadlines with a 30 s ping keepalive (browsers answer automatically,
+  so idle noVNC sessions stay up), and caps concurrent proxied connections at
+  32 (excess gets 503). Malformed input yields at most one short log line,
+  never a stack trace.
 - `--shm-size`: not needed. The default is fine; the image does not require
   DRI devices, GPU flags, or privileged mode. Never `--privileged`.

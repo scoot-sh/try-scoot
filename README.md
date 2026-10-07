@@ -67,7 +67,25 @@ instead. Details and evidence in docs/benchmark.md.
 
 No password is set by default, so keep the browser port on loopback as in
 the one-liner above (`-p 127.0.0.1:6080:6080`). To reach it from elsewhere,
-tunnel over `ssh -L 6080:localhost:6080`.
+tunnel over `ssh -L 6080:localhost:6080` (the tunnel keeps `Host:
+localhost:6080`, so it passes the Host pin).
+
+The WebSocket upgrade pins the served Host against DNS rebinding: only
+`localhost`, `127.0.0.1`, or `[::1]` (any port, so Docker `-p 6081:6080`
+mappings and `ssh -L` local ports keep working) connect by default.
+Opening the desktop by LAN IP or another hostname needs
+`WSBRIDGE_ALLOW_HOST` (comma-separated `host[:port]`, empty by default):
+
+```sh
+docker run --rm -p 6080:6080 -e WSBRIDGE_ALLOW_HOST=192.168.1.5:6080 ghcr.io/scoot-sh/try-scoot
+# or -e WSBRIDGE_ALLOW_HOST=myhost for any port / multiple: -e WSBRIDGE_ALLOW_HOST=myhost,192.168.1.5:6080
+```
+
+A bare hostname allows any port; a `host:port` entry requires that exact
+port. A non-default browser port (`-e NOVNC_PORT=6081 -p 127.0.0.1:6081:6081`)
+keeps working on `localhost` because the pin tracks the served port. Without
+a listing the upgrade gets 403 (`host not allowed (set WSBRIDGE_ALLOW_HOST
+to allow this host)`) and the log names the variable once.
 
 `VNC_PASSWORD` enables wayvnc password auth (fail-closed: setting it always
 protects the port, never starts open). The service writes a wayvnc config
@@ -82,6 +100,9 @@ the DES path encrypts, and DES uses the first 8 password characters, so keep
 passwords short and tunnel over SSH on untrusted networks. `VNC_USER`
 (default empty) sets the wayvnc username; the browser prompt only asks for
 the password in practice. Full posture in docs/security.md.
+
+Clipboard paste above 1 MiB drops the connection (1 MiB frame cap, close
+1009); reconnect recovers and typical pastes (KBs) are unaffected.
 
 The container runs the session as non-root user `abc` (uid 911). The VNC
 port binds loopback only by default; the browser port is the only one the
