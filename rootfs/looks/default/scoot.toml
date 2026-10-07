@@ -1,12 +1,29 @@
-[output]
-[virtual_input]
-enabled = true
+[layout]
+default_column_width = 1
+
+[appearance]
+background_color = "#1e1a2b"
+prefer_no_csd = true
+
 [wallpaper]
 image = "/defaults/wallpaper.png"
+mode = "fill"
+
+[autostart]
+commands = [
+  "spawn scoot-bar-look",
+]
+
 [binds]
-"Alt+Return" = "spawn foot"
-"Super+Return" = "spawn foot"
-"Alt+d" = "spawn fuzzel"
-"Super+d" = "spawn fuzzel"
-"Alt+q" = "close"
-"Super+q" = "close"
+"alt+Return" = "spawn foot"
+"super+Return" = "spawn foot"
+"alt+t" = "spawn foot"
+"super+t" = "spawn foot"
+"alt+d" = "spawn fuzzel"
+"super+d" = "spawn fuzzel"
+"alt+q" = "close"
+"super+q" = "close"
+"alt+h" = "focus-column left"
+"alt+l" = "focus-column right"
+"super+h" = "focus-column left"
+"super+l" = "focus-column right"

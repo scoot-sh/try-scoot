@@ -71,31 +71,56 @@ let
   '';
 
   scootConfig = pkgs.writeText "scoot-config.toml" ''
+    [layout]
+    default_column_width = 1
+
+    [appearance]
+    background_color = "#1e1a2b"
+    prefer_no_csd = true
+
     [output]
     [virtual_input]
     enabled = true
 
     [wallpaper]
-    ${lib.optionalString needBg ''image = "/defaults/wallpaper.png"''}
+    ${lib.optionalString needBg ''image = "/defaults/wallpaper.png"
+    mode = "fill"''}
 
     [autostart]
-    ${lib.optionalString needBar ''bar = "spawn scoot-bar-look"''}
+    ${lib.optionalString needBar ''commands = [
+      "spawn scoot-bar-look",
+    ]''}
 
     [binds]
-    "Alt+Return" = "spawn foot"
-    "Super+Return" = "spawn foot"
-    "Alt+d" = "spawn fuzzel"
-    "Super+d" = "spawn fuzzel"
-    "Alt+q" = "close"
-    "Super+q" = "close"
-    "Alt+h" = "focus left"
-    "Alt+j" = "focus down"
-    "Alt+k" = "focus up"
-    "Alt+l" = "focus right"
+    "alt+Return" = "spawn foot"
+    "super+Return" = "spawn foot"
+    "alt+t" = "spawn foot"
+    "super+t" = "spawn foot"
+    "alt+d" = "spawn fuzzel"
+    "super+d" = "spawn fuzzel"
+    "alt+q" = "close"
+    "super+q" = "close"
+    "alt+h" = "focus-column left"
+    "alt+l" = "focus-column right"
+    "super+h" = "focus-column left"
+    "super+l" = "focus-column right"
   '';
 
   barConfig = pkgs.writeText "scoot-bar.toml" ''
-    font = "/usr/share/fonts/truetype/DejaVu/DejaVuSans.ttf"
+    left = ["workspaces"]
+    center = ["clock"]
+    right = []
+
+    [bar]
+    height = 36
+
+    [colors]
+    background = "#1e1a2b"
+    foreground = "#e6e1f5"
+    accent = "#7c6cf0"
+
+    [clock]
+    format = "%H:%M"
   '';
 
   footConfig = pkgs.writeText "foot.ini" ''
@@ -113,7 +138,7 @@ let
   '';
 
   barLookWrapper = writeShellScriptBin "scoot-bar-look" ''
-    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/truetype/DejaVu/DejaVuSans.ttf "$@"
+    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/truetype/DejaVuSans.ttf "$@"
   '';
 
   wtypeShim = writeShellScriptBin "wtype" ''
