@@ -1,0 +1,12 @@
+[output]
+[virtual_input]
+enabled = true
+[wallpaper]
+image = "/defaults/wallpaper.png"
+[binds]
+"Alt+Return" = "spawn foot"
+"Super+Return" = "spawn foot"
+"Alt+d" = "spawn fuzzel"
+"Super+d" = "spawn fuzzel"
+"Alt+q" = "close"
+"Super+q" = "close"

@@ -1,0 +1,80 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.nixos.org
+      - run: nix flake check
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.nixos.org
+      - run: nix build .#image-try-scoot --print-build-logs
+  push:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [check, build]
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.nixos.org
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          nix build .#image-try-scoot --print-build-logs
+          out=$(nix build .#image-try-scoot --no-link --print-out-paths)
+          docker load < $out
+          docker tag try-scoot:latest ghcr.io/scoot-sh/try-scoot:${{ matrix.system }}
+          docker push ghcr.io/scoot-sh/try-scoot:${{ matrix.system }}
+  manifest:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [push]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          docker manifest create ghcr.io/scoot-sh/try-scoot:latest \
+            ghcr.io/scoot-sh/try-scoot:x86_64-linux \
+            ghcr.io/scoot-sh/try-scoot:aarch64-linux
+          docker manifest push ghcr.io/scoot-sh/try-scoot:latest

@@ -1,0 +1,21 @@
+#!/bin/bash
+# wayvnc against scoot's headless socket, as abc.
+# Default: localhost-only, port 5900, no auth. Browser path uses in-container noVNC.
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/911}"
+echo "[wayvnc] waiting for $RUNTIME/scoot-display"
+until [ -f "$RUNTIME/scoot-display" ]; do sleep 0.5; done
+NAME="$(cat "$RUNTIME/scoot-display")"
+echo "[wayvnc] display $NAME; waiting for socket"
+until [ -S "$RUNTIME/$NAME" ]; do sleep 0.5; done
+
+LISTEN="${VNC_LISTEN:-localhost}"
+FPS="${VNC_FPS:-30}"
+ARGS=(-f "$FPS")
+[ -n "${VNC_KEYBOARD:-}" ] && ARGS+=(-k "$VNC_KEYBOARD")
+
+if [ -n "${VNC_PASSWORD:-}" ]; then
+  echo "[wayvnc] VNC_PASSWORD is set: password auth is not yet wired in this minimal image; starting without auth on $LISTEN (loopback by default). Set VNC_LISTEN=127.0.0.1 and keep the port on loopback." >&2
+fi
+echo "[wayvnc] capturing $NAME on $LISTEN" >&2
+exec s6-setuidgid abc env WAYLAND_DISPLAY="$NAME" XDG_RUNTIME_DIR="$RUNTIME" \
+  wayvnc "${ARGS[@]}" "$LISTEN"
