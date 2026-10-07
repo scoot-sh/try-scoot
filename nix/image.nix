@@ -35,8 +35,8 @@
     export CGO_ENABLED=0
     cp -r ${./wsbridge} ./wsbridge-src
     chmod -R u+w ./wsbridge-src
-    (cd ./wsbridge-src && go vet ./... && go test ./...)
-    go build -trimpath -ldflags "-s -w" -o $out/bin/wsbridge ./wsbridge-src
+    (cd ./wsbridge-src && go vet ./... && go test -count=1 ./...)
+    (cd ./wsbridge-src && go build -trimpath -ldflags "-s -w" -o $out/bin/wsbridge .)
   '';
 
   # noVNC web tree, copied as real files (not symlinked): the nixpkgs `novnc`
