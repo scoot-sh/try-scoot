@@ -5,14 +5,44 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 # try-scoot
 
+![scoot's ginger-night look in try-scoot: cream terminal with a ginger ring on near-black, the cat-peeking wallpaper at the right, floating bar with workspaces and clock](docs/ginger-night-preview.webp)
+
 The smallest fast way to try scoot: a lightweight desktop running the scoot
 compositor from the scoot flake, in your browser. No GPU needed (scoot's
 pixman path, software capture); no client install.
 
+What you see is scoot's `ginger-night` look (the cat-peeking desktop
+default, black field with one ginger accent): the wallpaper placed with
+`scootbg` `fit` on its black fill so the cat is never cropped, ginger
+focus rings, the floating translucent bar, the foot palette, the themed
+launcher and the Vanilla-DMZ cursor. The look is read live from the scoot
+flake input (`docs/examples/ginger-night/` plus the `ginger-night` entry in
+`nix/modules/desktop.nix`), so bumping `inputs.scoot` moves the image with
+it; see `nix/ginger-night.nix` for exactly what follows. Two deliberate
+divergences: the terminal font stays DejaVu Sans Mono (the look tunes with
+FiraCode Nerd Font, not shipped) and the bar keeps a minimal module set
+(workspaces + window title + clock, no Nerd-glyph icons or load/cpu
+daemons). Full screenshots in `docs/ginger-night-default.png` (VNC) and
+`docs/ginger-night-selkies.png` (Selkies, same desktop).
+
 What drove scoot: a no-GPU webtop you can open in a browser, and a desktop an
 agent can drive as easily as a person (scoot's control socket). This image is
-the "try it" visit: a terminal, the launcher, the bar, and a palette-color
+the "try it" visit: a terminal, the launcher, the bar, and the ginger-night
 look. Nothing else.
+
+## Look
+
+The session look is `ginger-night` and only `ginger-night`: there is no env
+var to pick another scoot look. That is deliberate, not a missing knob --
+another look would need its whole registry in the image (palettes, app
+files, wallpaper bytes for five looks) plus a runtime switch that re-seeds
+every config; the image instead reads the one look from the flake at build
+time and follows it on bump. To try a different look, run scoot itself with
+that example's files (see the look's README in the scoot repo). Out of
+scope by design: per-look wallpapers beyond ginger-night's CatPeeking file
+(the `look-no-third-party` check pins it by name and sha256 so any other
+image fails), Nerd-Font icons, and the look's load/cpu/network/volume
+daemons.
 
 ## Run
 
@@ -167,16 +197,15 @@ nix build .#image-try-scoot && docker load < result
 ```
 
 Images are `dockerTools.buildLayeredImage` outputs for `x86_64-linux` and
-`aarch64-linux`. `nix flake check` runs the look-hygiene check (no
-third-party images). See docs/ for layers, measurements, and the Selkies
+`aarch64-linux`. `nix flake check` runs the look-hygiene check (no vendored
+images under `rootfs/`; the ginger-night wallpaper from the scoot input
+pinned by name and sha256). See docs/ for layers, measurements, and the Selkies
 packaging decision.
 
 CI pushes per-arch tags on every `main` push (`:x86_64-linux`,
 `:aarch64-linux`, combined into `:latest`) and `pr-<N>-<shortsha>-<system>`
 per-arch tags on pull requests from this repo, so the `ghcr.io/…` one-liner is
-testable before merge. Note: this repo is private for now, so the GHCR
-package is private by default -- the maintainer must flip package visibility
-to public for "anyone can paste". Builds read the `scoot-sh` Cachix cache
+testable before merge. Builds read the `scoot-sh` Cachix cache
 (read-only); pushing to it is a maintainer job needing a `CACHIX_AUTH_TOKEN`
 secret, which is deliberately not wired into CI here.
 

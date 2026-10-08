@@ -192,9 +192,9 @@ container for unpacked, `docker stats` after a 30 s settle for idle).
 
 | layer | pull (tarball) | unpacked (`docker export`) | idle CPU / RAM |
 |---|---|---|---|
-| VNC (`:latest`, scoot `b11eb8c`) | 185,486,893 B (176.9 MiB) | 593,987,072 B (566.4 MiB) | 0.00% / ~43 MiB (no viewer); 0.00% / ~49 MiB (viewer) |
+| VNC (`:latest`, scoot `134e39a`, ginger-night) | 186,881,227 B (178.2 MiB) | 598,816,768 B (571.1 MiB) | 0.00% / 59.9 MiB (no viewer, 2 windows) |
 | Selkies L0 (compositor only) | 494,742,034 B (471.8 MiB) | 1,686,177,792 B (1.571 GiB) | 0.18% / 71.7 MiB (no viewer; prior round) |
-| Selkies full (`:selkies`) | 514,438,714 B (490.6 MiB) | 1,748,387,328 B (1.628 GiB) | 0.19–0.27% / ~119 MiB (no viewer); 27–48% / ~143 MiB (viewer attached, static screen, actively streaming) |
+| Selkies full (`:selkies`, ginger-night) | 515,831,613 B (492.0 MiB) | 1,753,213,440 B (1.633 GiB) | 0.19–0.27% / ~119 MiB (no viewer); 27–48% / ~143 MiB (viewer attached, static screen, actively streaming) |
 
 Reviewed baselines: the default tag's pre-#2 numbers were 185,480,055 B
 pull and 593,971,200 B unpacked (revts4, byte-exact); PR #2's scoot bump

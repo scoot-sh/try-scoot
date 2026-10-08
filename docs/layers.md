@@ -4,8 +4,11 @@
   daemon, no launcher. The smallest thing that streams.
 - L1 `image-l1`: L0 + `scootbar` + `scootbg` + `fuzzel` (the desktop profile
   packages from the scoot flake).
-- final `image-try-scoot`: L1 + the default look (palette-color solid
-  wallpaper generated at build time, themed foot/bar configs).
+- final `image-try-scoot`: L1 + the ginger-night look (the look's wallpaper
+  from the scoot flake input, `fit` on its black fill; foot palette, bar
+  colors/shape, scoot appearance/rings, fuzzel theme and cursor read from the
+  flake -- see `nix/ginger-night.nix`; DejaVu font and minimal bar modules
+  are the documented divergences).
 
 ## Diet (reviewer §5 plan, implemented this round)
 

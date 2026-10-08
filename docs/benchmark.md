@@ -12,10 +12,14 @@ docs/layers.md; the headline before/after is:
 | revision | tarball (pull) | unpacked (`docker export`, flattened) |
 |---|---|---|
 | `c17611a` (pre-diet) | 624,973,290 B (596.0 MiB) | 2,160,960,931 B (2.013 GiB) |
-| this head (scoot `b11eb8c`, `binds = true`) | 185,486,893 B (176.9 MiB) | 595,570,688 B (568.0 MiB) |
+| prior head (scoot `b11eb8c`, `binds = true`) | 185,486,893 B (176.9 MiB) | 595,570,688 B (568.0 MiB) |
+| this head (scoot `134e39a`, ginger-night default) | 186,881,227 B (178.2 MiB) | 598,816,768 B (571.1 MiB) |
 
-No pull regression from 177 MiB (+11,940 B tarball, +1.6 MB unpacked --
-scoot version drift, same diet).
+Pull +1,394,334 B (+0.75%) for the look: the 926,588 B wallpaper (already
+optimally compressed upstream, so it rides almost byte-for-byte) plus the
+Vanilla-DMZ cursor theme (~3.3 MB unpacked) and larger configs. Unpacked
++3.2 MB for the same reason. No diet regression: L0/L1 still build the old
+solid-plum path byte-identical in shape.
 
 ## Time-to-first-frame
 
@@ -26,12 +30,15 @@ start and the first-frame probe:
 | revision | run -> wayvnc capturing | run -> first browser frame |
 |---|---|---|
 | `c17611a` | 1.0 s (reviewer, M2-class host) | _n/a (implementer 9.0 s incl. browser launch)_ |
-| this head | 1.2 s (`date +%s.%N` around `docker run`, 0.2 s poll) | 1.3 s (run -> HTTP 200; headless Chromium painted the desktop in the same session, screenshots) |
+| prior head | 1.2 s (`date +%s.%N` around `docker run`, 0.2 s poll) | 1.3 s (run -> HTTP 200; headless Chromium painted the desktop in the same session, screenshots) |
+| this head (ginger-night) | 0.88 s (run -> `capturing` in `docker logs`, 0.2 s poll) | 0.91 s (run -> HTTP 200; canvas painted at +0.6 s in the same session, screenshots `docs/ginger-night-default.png`) |
 
-Idle with a viewer attached: 0.00% CPU (docker stats), ~49 MiB docker MEM,
-NET 78.6 kB rx / 1.75 MB tx over the ~60 s playwright session (frame-flow
-witness); idle without viewer: 0.00%, ~43 MiB (re-measured this head fresh:
-0.00%, 37.3 MiB, 1 window; 5 windows + viewer attached: 0.00%, 92 MiB).
+Idle with a viewer attached: 0.00% CPU (docker stats), ~49 MiB docker MEM
+(prior head; NET 78.6 kB rx / 1.75 MB tx over the ~60 s playwright session);
+idle without viewer this head: 0.00%, 59.9 MiB, 2 windows (wallpaper decode
+~8 MB in scootbg plus cursor theme and translucent bar/terminals; CPU still
+0% -- the damage model ships nothing static). Time to first frame unchanged
+(~1 s).
 The VNC damage model ships
 almost nothing on a static screen (same shape as the reference
 `image-scoot-vnc` idle win: 0.0% CPU / 0.9 kB/s vs
@@ -41,21 +48,21 @@ docs/layers.md).
 ## Selkies variant (`:selkies`)
 
 Same method, Mac Docker Desktop (arm64) runs of M2-built images; full
-tables in docs/selkies.md. Pull: L0 494,742,034 B (471.8 MiB), full
-514,438,714 B (490.6 MiB) vs 185,486,893 B (176.9 MiB) for the default
-tag (post-#2; pre-#2 reviewed baseline 185,480,055 B). Unpacked
-(`docker export` of created containers): L0 1,686,177,792 B, full
-1,748,387,328 B vs 593,987,072 B. Run to stream (full tag): HTTP 200 at
-1.05 s, first client settings applied (1280x800 h264enc) at 1.6 s,
-painted desktop in a persistent headless-Chromium connection
-(screenshots). Idle: full 0.19-0.27% / ~119 MiB without a viewer,
+tables in docs/selkies.md. This head (ginger-night, scoot `134e39a`): full
+515,831,613 B (492.0 MiB) vs prior 514,438,714 B (+1.39 MB, the same look
+delta as the default tag); unpacked 1,753,213,440 B vs 1,748,387,328 B
+(+4.8 MB). Default tag this head 186,881,227 B / 598,816,768 B. Run to
+stream (full tag): HTTP 200 at 1.05 s (prior round), first client settings
+applied (1280x800 h264enc) at 1.6 s, painted desktop in a persistent
+headless-Chromium connection (screenshots `docs/ginger-night-selkies.png`,
+stream up at +0.7 s this head). Idle: full 0.19-0.27% / ~119 MiB without a viewer,
 27-48% / ~143 MiB with a viewer attached and actively streaming
 (software x264 FullFrame 60 fps -- the old 0.19%-with-viewer claim came
 from a backgrounded client); L0 0.18% / 71.7 MiB (prior round).
 
 ## Input truth (binds ON)
 
-With scoot `b11eb8c` (contains #494) and the image's `[virtual_input]
+With scoot `134e39a` (contains #494 and the ginger-night look #506) and the image's `[virtual_input]
 enabled = true` + `binds = true` (restart-only), remote chords run binds.
 Established with a scripted RFB client (`rfb-probe.py`, stdlib Python: real
 `KeyEvent`/`PointerEvent` frames over TCP, checked against
