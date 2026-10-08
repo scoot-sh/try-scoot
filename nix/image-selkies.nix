@@ -24,6 +24,7 @@
   scootbgPkg,
   scootbarPkg,
   selkiesStack,
+  scootFlake,
 }: {
   name,
   tag ? "latest",
@@ -33,6 +34,8 @@
   maxLayers ? 60,
 }: let
   tinyLocales = pkgs.glibcLocales.override {allLocales = false;};
+
+  ginger = import ./ginger-night.nix {inherit lib;} {inherit scootFlake;};
 
   basePackages = with pkgs;
     [
@@ -78,7 +81,8 @@
       selkiesStack.selkies
       foot
     ]
-    ++ lib.optionals withDesktop [fuzzel scootbarPkg scootbgPkg scootPkg];
+    ++ lib.optionals withDesktop [fuzzel scootbarPkg scootbgPkg scootPkg]
+    ++ lib.optionals (withDesktop && withLook) [pkgs.vanilla-dmz];
 
   rootEnv = buildEnv {
     name = "${name}-root-env";
@@ -93,91 +97,193 @@
   };
 
   wallpaperPng =
-    runCommand "try-scoot-wallpaper.png"
-    {nativeBuildInputs = [pkgs.python3];} ''
-      python3 - "$out" <<'PY'
-      import struct, sys, zlib
-      out = sys.argv[1]
-      w, h = 1280, 800
-      r, g, b = 0x1E, 0x1A, 0x2B
-      raw = b"".join(b"\x00" + bytes([r, g, b]) * w for _ in range(h))
-      def chunk(t, d):
-          c = struct.pack(">I", len(d)) + t + d
-          return c + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
-      png = (b"\x89PNG\r\n\x1a\n"
-             + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
-             + chunk(b"IDAT", zlib.compress(raw, 9))
-             + chunk(b"IEND", b""))
-      open(out, "wb").write(png)
-      PY
-    '';
+    if withLook
+    then ginger.wallpaperFile
+    else
+      runCommand "try-scoot-wallpaper.png"
+      {nativeBuildInputs = [pkgs.python3];} ''
+        python3 - "$out" <<'PY'
+        import struct, sys, zlib
+        out = sys.argv[1]
+        w, h = 1280, 800
+        r, g, b = 0x1E, 0x1A, 0x2B
+        raw = b"".join(b"\x00" + bytes([r, g, b]) * w for _ in range(h))
+        def chunk(t, d):
+            c = struct.pack(">I", len(d)) + t + d
+            return c + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+        png = (b"\x89PNG\r\n\x1a\n"
+               + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(raw, 9))
+               + chunk(b"IEND", b""))
+        open(out, "wb").write(png)
+        PY
+      '';
 
-  scootConfig = pkgs.writeText "scoot-config.toml" ''
-    [layout]
-    default_column_width = 1
+  scootConfig =
+    if withLook
+    then
+      pkgs.writeText "scoot-config.toml" ''
+        [layout]
+        default_column_width = 1
+        gap = ${toString ginger.scootExample.layout.gap}
 
-    [appearance]
-    background_color = "#1e1a2b"
-    prefer_no_csd = true
+        [appearance]
+        background_color = "${ginger.ginger.appearance.background_color}"
+        corner_radius = ${toString ginger.scootExample.appearance.corner_radius}
+        focus_ring_width = ${toString ginger.scootExample.appearance.focus_ring_width}
+        focus_ring_inactive_width = ${toString ginger.scootExample.appearance.focus_ring_inactive_width}
+        focus_ring_active_color = "${ginger.ginger.appearance.focus_ring_active_color}"
+        focus_ring_inactive_color = "${ginger.ginger.appearance.focus_ring_inactive_color}"
+        cursor_theme = "${ginger.cursor.name}"
+        cursor_size = ${toString ginger.cursor.size}
+        prefer_no_csd = true
 
-    [output]
-    [virtual_input]
-    enabled = true
-    # NOTE: deliberately no `binds = true` here, unlike nix/image.nix.
-    # That flag governs virtual-keyboard input only; the Selkies path
-    # delivers remote chords through the compositor seat keymap (real seat
-    # input to the nested scoot, not virtual-keyboard), so chords fire
-    # regardless and the flag would be a no-op. See docs/selkies.md.
+        [output]
+        [virtual_input]
+        enabled = true
+        # NOTE: deliberately no `binds = true` here, unlike nix/image.nix.
+        # That flag governs virtual-keyboard input only; the Selkies path
+        # delivers remote chords through the compositor seat keymap (real seat
+        # input to the nested scoot, not virtual-keyboard), so chords fire
+        # regardless and the flag would be a no-op. See docs/selkies.md.
 
-    [wallpaper]
-    ${lib.optionalString withDesktop ''        image = "/defaults/wallpaper.png"
-            mode = "fill"''}
+        [wallpaper]
+        ${lib.optionalString withDesktop ''          image = "/defaults/wallpaper.png"
+                mode = "${ginger.ginger.wallpaper.mode}"
+                fill = "${ginger.ginger.wallpaper.fill}"''}
 
-    [autostart]
-    ${lib.optionalString withDesktop ''      commands = [
-            "spawn scoot-bar-look",
-          ]''}
+        [autostart]
+        ${lib.optionalString withDesktop ''          commands = [
+                  "spawn scoot-bar-look",
+                ]''}
 
-    [binds]
-    "alt+Return" = "spawn foot"
-    "super+Return" = "spawn foot"
-    "alt+t" = "spawn foot"
-    "super+t" = "spawn foot"
-    "alt+d" = "spawn fuzzel"
-    "super+d" = "spawn fuzzel"
-    "alt+q" = "close"
-    "super+q" = "close"
-    "alt+h" = "focus-column left"
-    "alt+l" = "focus-column right"
-    "super+h" = "focus-column left"
-    "super+l" = "focus-column right"
-  '';
+        [binds]
+        "alt+Return" = "spawn foot"
+        "super+Return" = "spawn foot"
+        "alt+t" = "spawn foot"
+        "super+t" = "spawn foot"
+        "alt+d" = "spawn fuzzel-look"
+        "super+d" = "spawn fuzzel-look"
+        "alt+q" = "close"
+        "super+q" = "close"
+        "alt+h" = "focus-column left"
+        "alt+l" = "focus-column right"
+        "super+h" = "focus-column left"
+        "super+l" = "focus-column right"
+      ''
+    else
+      pkgs.writeText "scoot-config.toml" ''
+        [layout]
+        default_column_width = 1
 
-  barConfig = pkgs.writeText "scoot-bar.toml" ''
-    left = ["workspaces"]
-    center = ["clock"]
-    right = []
+        [appearance]
+        background_color = "#1e1a2b"
+        prefer_no_csd = true
 
-    [bar]
-    height = 36
+        [output]
+        [virtual_input]
+        enabled = true
+        # NOTE: deliberately no `binds = true` here, unlike nix/image.nix.
+        # That flag governs virtual-keyboard input only; the Selkies path
+        # delivers remote chords through the compositor seat keymap (real seat
+        # input to the nested scoot, not virtual-keyboard), so chords fire
+        # regardless and the flag would be a no-op. See docs/selkies.md.
 
-    [colors]
-    background = "#1e1a2b"
-    foreground = "#e6e1f5"
-    accent = "#7c6cf0"
+        [wallpaper]
+        ${lib.optionalString withDesktop ''            image = "/defaults/wallpaper.png"
+                  mode = "fill"''}
 
-    [clock]
-    format = "%H:%M"
-  '';
+        [autostart]
+        ${lib.optionalString withDesktop ''          commands = [
+                  "spawn scoot-bar-look",
+                ]''}
 
-  footConfig = pkgs.writeText "foot.ini" ''
-    font = DejaVu Sans Mono:size=11
-    dpi-aware = no
+        [binds]
+        "alt+Return" = "spawn foot"
+        "super+Return" = "spawn foot"
+        "alt+t" = "spawn foot"
+        "super+t" = "spawn foot"
+        "alt+d" = "spawn fuzzel"
+        "super+d" = "spawn fuzzel"
+        "alt+q" = "close"
+        "super+q" = "close"
+        "alt+h" = "focus-column left"
+        "alt+l" = "focus-column right"
+        "super+h" = "focus-column left"
+        "super+l" = "focus-column right"
+      '';
 
-    [colors-dark]
-    background = 1e1a2b
-    foreground = e6e1f5
-  '';
+  barConfig =
+    if withLook
+    then
+      pkgs.writeText "scoot-bar.toml" ''
+        left = ["workspaces", "window-title"]
+        center = ["clock"]
+        right = []
+
+        [bar]
+        height = ${toString ginger.barExample.bar.height}
+        margin = "${ginger.barExample.bar.margin}"
+        radius = ${toString ginger.barExample.bar.radius}
+        opacity = ${toString ginger.barExample.bar.opacity}
+        font-size = ${toString ginger.barExample.bar.font-size}
+        padding = ${toString ginger.barExample.bar.padding}
+        spacing = ${toString ginger.barExample.bar.spacing}
+        separator = ${toString ginger.barExample.bar.separator}
+
+        [colors]
+        background = "${ginger.ginger.barColors.background}"
+        foreground = "${ginger.ginger.barColors.foreground}"
+        accent = "${ginger.ginger.barColors.accent}"
+        hover = "${ginger.ginger.barColors.hover}"
+        dim = "${ginger.ginger.barColors.dim}"
+        urgent = "${ginger.ginger.barColors.urgent}"
+
+        [workspaces]
+        pill-shape = "${ginger.barExample.workspaces.pill-shape}"
+        pill-inset = ${toString ginger.barExample.workspaces.pill-inset}
+        item-gap = ${toString ginger.barExample.workspaces.item-gap}
+        margin = ${toString ginger.barExample.workspaces.margin}
+        disc = ${lib.boolToString ginger.barExample.workspaces.disc}
+        inactive-color = "${ginger.barExample.workspaces.inactive-color}"
+
+        [window-title]
+        show-app-id = ${lib.boolToString ginger.barExample.window-title.show-app-id}
+        max-width = ${toString ginger.barExample.window-title.max-width}
+
+        [clock]
+        format = "${ginger.barExample.clock.format}"
+      ''
+    else
+      pkgs.writeText "scoot-bar.toml" ''
+        left = ["workspaces"]
+        center = ["clock"]
+        right = []
+
+        [bar]
+        height = 36
+
+        [colors]
+        background = "#1e1a2b"
+        foreground = "#e6e1f5"
+        accent = "#7c6cf0"
+
+        [clock]
+        format = "%H:%M"
+      '';
+
+  footConfig =
+    if withLook
+    then pkgs.writeText "foot.ini" ginger.footIni
+    else
+      pkgs.writeText "foot.ini" ''
+        font = DejaVu Sans Mono:size=11
+        dpi-aware = no
+
+        [colors-dark]
+        background = 1e1a2b
+        foreground = e6e1f5
+      '';
 
   fuzzelConfig = pkgs.writeText "fuzzel.ini" ''
     [main]
@@ -187,6 +293,10 @@
 
   barLookWrapper = writeShellScriptBin "scoot-bar-look" ''
     exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/truetype/DejaVuSans.ttf "$@"
+  '';
+
+  fuzzelLookWrapper = writeShellScriptBin "fuzzel-look" ''
+    exec ${pkgs.fuzzel}/bin/fuzzel${ginger.fuzzelFlags} "$@"
   '';
 
   wtypeShim = writeShellScriptBin "wtype" ''
@@ -290,6 +400,10 @@
       cp ${wtypeShim}/bin/wtype $out/usr/local/bin/wtype
       chmod +x $out/usr/local/bin/scoot-bar-look $out/usr/local/bin/wtype
     ''}
+    ${lib.optionalString (withDesktop && withLook) ''
+      cp ${fuzzelLookWrapper}/bin/fuzzel-look $out/usr/local/bin/fuzzel-look
+      chmod +x $out/usr/local/bin/fuzzel-look
+    ''}
     cp -r ${../rootfs/selkies/s6}/. $out/etc/s6/
     chmod -R u+w $out/etc/s6
     ${lib.optionalString (!withDesktop) ''
@@ -300,24 +414,29 @@
     find $out/etc/s6 -name run -exec chmod +x {} +
   '';
 
-  imageEnv = [
-    "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    "HOME=/config"
-    "TITLE=${title}"
-    "LANG=en_US.UTF-8"
-    "LOCALE_ARCHIVE=${tinyLocales}/lib/locale/locale-archive"
-    "TZDIR=${pkgs.tzdata}/share/zoneinfo"
-    "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
-    "XDG_DATA_DIRS=/usr/share"
-    "FONTCONFIG_FILE=/etc/fonts/fonts.conf"
-    "XKB_CONFIG_ROOT=${pkgs.xkeyboard_config}/share/X11/xkb"
-    "XDG_CURRENT_DESKTOP=scoot"
-    "XDG_SESSION_TYPE=wayland"
-    "GDK_BACKEND=wayland"
-    "TERMINAL=foot"
-    "PULSE_SERVER=unix:/run/pulse/native"
-    "SELKIES_UI_TITLE=try-scoot"
-  ];
+  imageEnv =
+    [
+      "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "HOME=/config"
+      "TITLE=${title}"
+      "LANG=en_US.UTF-8"
+      "LOCALE_ARCHIVE=${tinyLocales}/lib/locale/locale-archive"
+      "TZDIR=${pkgs.tzdata}/share/zoneinfo"
+      "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
+      "XDG_DATA_DIRS=/usr/share"
+      "FONTCONFIG_FILE=/etc/fonts/fonts.conf"
+      "XKB_CONFIG_ROOT=${pkgs.xkeyboard_config}/share/X11/xkb"
+      "XDG_CURRENT_DESKTOP=scoot"
+      "XDG_SESSION_TYPE=wayland"
+      "GDK_BACKEND=wayland"
+      "TERMINAL=foot"
+      "PULSE_SERVER=unix:/run/pulse/native"
+      "SELKIES_UI_TITLE=try-scoot"
+    ]
+    ++ lib.optionals (withDesktop && withLook) [
+      "XCURSOR_THEME=${ginger.cursor.name}"
+      "XCURSOR_SIZE=${toString ginger.cursor.size}"
+    ];
 in
   dockerTools.buildLayeredImage {
     inherit name tag maxLayers;

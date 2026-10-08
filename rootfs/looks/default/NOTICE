@@ -1,7 +1,0 @@
-# try-scoot default look: palette colors only, no third-party images.
-# Wallpaper is a solid dark plum (#1E1A2B) generated at build time
-# (see nix/image.nix wallpaperPng). This file records the palette.
-wallpaper = "solid #1E1A2B (generated at build time, no image file)"
-compositor-accent = "#7C6CF0"
-bar-background = "#1E1A2B"
-text = "#E6E1F5"
