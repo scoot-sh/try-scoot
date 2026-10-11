@@ -9,7 +9,7 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 The smallest fast way to try scoot: a lightweight desktop running the scoot
 compositor from the scoot flake, in your browser. No GPU needed (scoot's
-pixman path, software capture); no client install.
+CPU renderer tier, software capture); no client install.
 
 What you see is scoot's `ginger-night` look (the cat-peeking desktop
 default, black field with one ginger accent): the wallpaper placed with
