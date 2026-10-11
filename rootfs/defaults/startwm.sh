@@ -1,6 +1,6 @@
 #!/bin/bash
 # Launches the headless scoot compositor for try-scoot.
-# Fresh implementation: fixed 1280x800 output, CPU pixman path, no GPU.
+# Fresh implementation: fixed 1280x800 output on the CPU renderer tier (no GPU here).
 ulimit -c 0
 export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}"
 export XDG_CURRENT_DESKTOP=scoot
