@@ -54,6 +54,8 @@ Measured image delta: pull 187,027,379 B -> 243,961,884 B (+56,934,505 B,
 +30.4%), unpacked 599,079,936 B -> 728,529,920 B (+129,449,984 B), matching
 the marginal NAR plus config bytes. Still 61% below the pre-diet pull.
 
+Why FiraCode Nerd Font ships whole instead of a subset: a Nerd-Font subset would break the look's icon coverage on the next scoot bump (any new glyph the look adopts would need re-subsetting, and foot, starship and the bar each draw from different corners of the font), so the image carries the font package as nixpkgs ships it -- one output, all weights -- and follows the look on bump rather than pinning a glyph list that silently rots.
+
 Method: root-env closure via `nix path-info --closure-size`; tarball bytes
 via `ls -l` on the built store tarball; unpacked via `docker export` (the
 `docker image inspect .Size` field double-counts shared layers on some

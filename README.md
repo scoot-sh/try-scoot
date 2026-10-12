@@ -84,7 +84,9 @@ The one-liner above is the whole story: the image needs no `--shm-size`
 (the browser-side canvas lives in the *host* browser, and the container runs
 fine with the runtime default) and no named volume (a `/config` volume only
 matters if you want your config edits to survive `--rm`;
-add `-v try-scoot-config:/config` for that).
+add `-v try-scoot-config:/config` for that). An existing `try-scoot-config`
+volume keeps your old shell defaults until you drop it (new defaults land
+only on fresh volumes).
 
 Size it with `VNC_WIDTH`/`VNC_HEIGHT` (default `1280x800`). `VNC_FPS`
 (default `30`) caps the capture rate. `VNC_KEYBOARD` picks a wayvnc keyboard
