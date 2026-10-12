@@ -50,8 +50,8 @@ top-level packages minus what the image already carried):
 | btop | 2,123,488 B | tiny | the look ships a theme for it |
 | bash-completion | 1,271,696 B | tiny | shell completion |
 
-Measured image delta: pull 187,027,379 B -> 243,961,884 B (+56,934,505 B,
-+30.4%), unpacked 599,079,936 B -> 728,529,920 B (+129,449,984 B), matching
+Measured image delta: pull 187,027,379 B -> 243,967,344 B (+56,939,964 B,
++30.4%), unpacked 599,079,936 B -> 728,530,944 B (+129,451,008 B), matching
 the marginal NAR plus config bytes. Still 61% below the pre-diet pull.
 
 Why FiraCode Nerd Font ships whole instead of a subset: a Nerd-Font subset would break the look's icon coverage on the next scoot bump (any new glyph the look adopts would need re-subsetting, and foot, starship and the bar each draw from different corners of the font), so the image carries the font package as nixpkgs ships it -- one output, all weights -- and follows the look on bump rather than pinning a glyph list that silently rots.

@@ -15,7 +15,7 @@ docs/layers.md; the headline before/after is:
 | prior head (scoot `b11eb8c`, `binds = true`) | 185,486,893 B (176.9 MiB) | 595,570,688 B (568.0 MiB) |
 | ginger-night default (scoot `134e39a`) | 186,881,227 B (178.2 MiB) | 598,816,768 B (571.1 MiB) |
 | this head, measured on the branch (lean baseline rebuilt: scoot `722afd2`) | 187,027,379 B (178.4 MiB) | 599,079,936 B (571.3 MiB) |
-| this head (show-it-off: fonts, bar modules, bash+starship, nvim+btop) | 243,961,884 B (232.7 MiB) | 728,529,920 B (694.8 MiB) |
+| this head (show-it-off: fonts, bar modules, bash+starship, nvim+btop) | 243,967,344 B (232.7 MiB) | 728,530,944 B (694.8 MiB) |
 
 Pull +1,394,334 B (+0.75%) for the look: the 926,588 B wallpaper (already
 optimally compressed upstream, so it rides almost byte-for-byte) plus the
@@ -46,31 +46,66 @@ start and the first-frame probe:
 | prior head | 1.2 s (`date +%s.%N` around `docker run`, 0.2 s poll) | 1.3 s (run -> HTTP 200; headless Chromium painted the desktop in the same session, screenshots) |
 | ginger-night | 0.88 s (run -> `capturing` in `docker logs`, 0.2 s poll) | 0.91 s (run -> HTTP 200; canvas painted at +0.6 s in the same session, screenshots `docs/ginger-night-default.png`) |
 | lean baseline rebuilt (this branch) | 0.83 s | 0.84 s (same method, 0.2 s poll) |
-| this head (two first-run columns) | 0.93 s | 0.94 s (screenshot `docs/show-it-off.png`) |
+| this head (two first-run columns) | 0.91 s | 0.92 s (screenshot `docs/show-it-off.png`) |
 
-One extra foot costs ~0.1 s. Idle (no viewer, 30 s settle, `docker stats`):
+One extra foot costs ~0.1 s. Idle, re-measured this round (no viewer, fresh
+container, 30 s settle per state, 3 runs; method below):
 
-| state | CPU | MEM |
-|---|---|---|
-| lean baseline (1 sh terminal) | 0.00% | 44.9 MiB |
-| this head, static desktop (no windows) | 0.00% | 51.9 MiB |
-| this head, bash terminal only | 0.00% | 62.8 MiB |
-| this head, first-run (bash + live btop) | 2.7-2.9% | ~60 MiB |
+| state | CPU (`docker stats`) | MEM (`docker stats`) | `memory.current` | anon / file |
+|---|---|---|---|---|
+| lean baseline (1 sh terminal) | 0.00% | 44.9 MiB | _n/a (prior round)_ | _n/a_ |
+| this head, static desktop (no windows) | 0.00% | 41.0-43.5 MiB | 45.1-48.5 MB | 29.0 / 6.4-7.3 MB |
+| this head, bash terminal only | 0.00% | 49.3-52.7 MiB | 53.6-58.1 MB | 34.0 / 10.1-11.0 MB |
+| this head, first-run (bash + live btop) | 1.20-1.23% | 58.7-59.6 MiB | 62.5-66.3 MB | 37.7-38.6 / 13.8-14.6 MB |
 
-The btop column redraws every 1.5 s and VNC ships the damage: any animation
-costs this, not btop specifically. Close it and idle is 0% again.
+Method: per state, after a 30 s settle with no viewer attached, read the
+container cgroup's `memory.current` (total bytes charged) plus
+`memory.stat` (`anon` = anonymous process memory incl. shm, `file` = page
+cache incl. tmpfs, `kernel` ≈ 6.5-9.2 MB shown separately), the
+in-container RSS sum (`ps -eo rss`), and `docker stats` MEM for comparison.
+Exact commands: `ID=$(docker inspect -f '{{.Id}}' <c>)`,
+`CG=/sys/fs/cgroup/system.slice/docker-$ID.scope`,
+`cat $CG/memory.current`, `grep -E '^(anon|file|kernel|shmem) ' $CG/memory.stat`,
+`docker stats --no-stream <c>`,
+`docker exec <c> ps -eo rss --no-headers | awk '{s+=$1} END {print s}'`.
+States: first-run as autostarted, then bash-only after `pkill -x btop`,
+then static after `pkill -x foot` (bar/bg/proxy remain), each re-settled
+30 s. Full per-run numbers are in the fix report.
 
-Bar CPU, before/after (scootbar jiffies delta over 60 s idle, `/proc` reads
-from inside the container, 8 CPUs): lean baseline 0.000% (0 jiffies),
-this head with load+cpu helpers firing every 10 s 0.000% (0 jiffies).
-No polling storm: each helper wake is microseconds; the bar itself wakes
-only when a line arrives.
+Why the old ~60 MiB "did not reproduce" at 234 MiB: `docker stats` MEM is
+`memory.current` minus reclaimable file cache, and file-cache residency
+depends on what the container has done. A fresh settled container
+reproduces ~59-60 MiB three times running (this round and the author's);
+a container that has served viewer sessions and screenshots accumulates
+page cache and shm buffers (a used container here read `current` 77.7 MB
+vs 59.6-66.3 MB fresh), and a single `docker stats` sample from such a
+container reads higher. Under memory pressure the file share is
+reclaimable; for comparable numbers use a fresh container, 30 s settle,
+no viewer. The in-container RSS sum (~156 MiB) overcounts: every process
+maps the same Nix-store libraries and fonts, so shared pages are counted
+once per process; `anon` (~38 MB first-run) is the unshared process
+memory. README now carries the fresh-settled ranges above, not the old
+single samples (static was ~52 MiB, bash-only ~63 MiB).
+
+The btop column redraws every 1.5 s and VNC ships the damage when a viewer
+is attached (prior rounds: 2-4% with a viewer painting; 1.2% with no
+viewer, this round): any animation costs this, not btop specifically.
+Close it and idle is 0% again.
+
+Bar CPU, before/after (scootbar utime+stime jiffies delta over 60 s idle,
+`/proc` reads from inside the container, 8 CPUs, USER_HZ=100): lean
+baseline 0.000% (0 jiffies), this head with load+cpu helpers firing every
+10 s 0.002% (1 jiffy: 100 x 1 / (60 x 100 x 8)). One 10 ms tick in a
+minute across 8 CPUs is scheduler granularity, not a polling storm: each
+helper wake is microseconds; the bar itself wakes only when a line
+arrives.
 
 Idle with a viewer attached: 0.00% CPU (docker stats), ~49 MiB docker MEM
 (prior head; NET 78.6 kB rx / 1.75 MB tx over the ~60 s playwright session);
-idle without viewer this head: 0.00%, 59.9 MiB, 2 windows (wallpaper decode
-~8 MB in scootbg plus cursor theme and translucent bar/terminals; CPU still
-0% -- the damage model ships nothing static). Time to first frame unchanged
+idle without viewer this head: 0.00% static / bash-only, ~1.2% first-run
+(table above; wallpaper decode plus cursor theme and translucent
+bar/terminals; CPU still 0% without the live column -- the damage model
+ships nothing static). Time to first frame unchanged
 (~1 s).
 The VNC damage model ships
 almost nothing on a static screen (same shape as the reference
@@ -81,24 +116,33 @@ docs/layers.md).
 ## Pointer visibility (invisible-mouse fix)
 
 User report: no mouse pointer visible in the browser. Root cause, each link
-measured: scoot `--headless` never composites a cursor into screencopy
-frames (scoot `render/capture_cursor.rs`: "`--headless` and `--nested`
-never draw a cursor on screen ..., so their frames never hold one"), so
-wayvnc has no cursor to overlay (`-r` tested live: frames stay
-byte-identical at two pointer positions) and sends zero cursor-shape
-rects (raw RFB probe over the noVNC websocket: 0 cursor pseudo-encoding
-rects in 8 s idle and across pointer moves). noVNC then hides the local
-pointer: on connect it calls `_refreshCursor()` with the default `none`
-cursor, and `Cursor.clear()` sets `canvas.style.cursor = 'none'`.
-Reproduced in headless Chrome (Google Chrome 153, playwright-core):
-connected canvas reports inline/computed cursor `none`.
+measured: without `wayvnc -r`, scoot's headless screencopy frames carry no
+cursor (the ext-image-copy-capture session defaults to `paint_cursors=false`,
+so frames are cursorless by request), and scoot refuses the separate
+pointer-cursor session outright, so wayvnc sends zero cursor-shape rects
+(raw RFB probe over the noVNC websocket: 0 cursor pseudo-encoding rects in
+8 s, before and after). noVNC then hides the local pointer: on connect it
+calls `_refreshCursor()` with the default `none` cursor, and
+`Cursor.clear()` sets `canvas.style.cursor = 'none'`.
 
-Image-side workaround shipped: the redirect appends `show_dot=true`,
-noVNC's designed fallback (a dot tracking the pointer while the server
-cursor is transparent; a real server cursor replaces it automatically).
-After: the same headless-Chrome probe reports the canvas cursor as a
-`url("data:image/png;base64,...")` dot. A `cursor-dot-fallback` flake
-check pins the param. The `look-no-third-party` check still passes.
+Fix shipped, in two layers. (1) The image now runs `wayvnc -r`
+(`rootfs/s6/service/wayvnc/run`): with `PAINT_CURSORS` requested, scoot
+re-renders the pointer into each capture, so the real Vanilla-DMZ arrow
+rides in the frame pixels. Verified live: stable raw-RFB frames at two
+pointer positions are byte-identical without `-r` (modulo the bar's live
+modules) and differ with `-r`; a 30x30 patch at the pointer shows the
+bright arrow where the pointer sits and background where it does not; a
+headless-Chrome (Google Chrome 153, playwright-core) screenshot of the
+noVNC page shows the real arrow. An earlier throwaway test that reported
+"`-r` changes nothing" compared frames without settling after the pointer
+move (captures taken within ~1 s of a move catch a full-screen transient)
+or at a single pointer position -- re-tested with 5 s settles and control
+pairs, the arrow is reliably there. (2) The `show_dot=true` redirect param
+stays: no cursor *shape* is ever sent (the pointer-cursor refusal is
+unchanged), so the dot remains the local-cursor cover at the hotspot; a
+`cursor-dot-fallback` flake check pins the param. The
+`look-no-third-party` check still passes. Cost of `-r`: pointer moves
+damage the frame (as any motion does); static idle is unaffected.
 
 Upstream repro for scoot (not filed; do not open upstream issues from
 here): run this image, connect noVNC, move the mouse -- no pointer;
@@ -114,8 +158,8 @@ tables in docs/selkies.md. Ginger-night head (scoot `134e39a`): full
 515,831,613 B (492.0 MiB), unpacked 1,753,213,440 B (1.633 GiB). This head
 (same apps+fonts as the default tag): full 572,805,816 B (546.3 MiB),
 unpacked 1,882,613,760 B (1.753 GiB) -- +56,974,203 B (+54.3 MiB) pull /
-+129,400,320 B (+123.4 MiB) unpacked, the same delta as the default tag. Default tag this head 243,961,884 B /
-728,529,920 B. Run to
++129,400,320 B (+123.4 MiB) unpacked, the same delta as the default tag. Default tag this head 243,967,344 B /
+728,530,944 B. Run to
 stream (full tag): HTTP 200 at 1.05 s (prior round), first client settings
 applied (1280x800 h264enc) at 1.6 s, painted desktop in a persistent
 headless-Chromium connection (screenshots `docs/ginger-night-selkies.png`,

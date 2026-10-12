@@ -5,7 +5,7 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 # try-scoot
 
-![scoot's ginger-night desktop in try-scoot: a live btop column beside a welcome terminal, the floating bar showing workspaces, window title, clock, load, cpu and network, the cat-peeking wallpaper at the right](docs/show-it-off.png)
+![scoot's ginger-night desktop in try-scoot: a live btop column beside a welcome terminal, the floating bar with workspaces left, clock centered and window title, load, cpu and network on the right, the cat-peeking wallpaper at the right](docs/show-it-off.png)
 
 The smallest fast way to try scoot: a lightweight desktop running the scoot
 compositor from the scoot flake, in your browser. No GPU needed (scoot's
@@ -16,10 +16,11 @@ CPU renderer tier, software capture); no client install.
   inside. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
   new apps and fonts add 54.3 MiB pull over the lean baseline, itemized in
   `docs/layers.md`.
-- **Fast:** `docker run` to capturing in 0.93 s, painted desktop in the
-  browser at 0.94 s (Asahi M2, measured; method in `docs/benchmark.md`).
-  A static desktop idles at 0.00% CPU (~52 MiB); the live btop column
-  costs ~3% while open, 0% with just a terminal.
+- **Fast:** `docker run` to capturing in 0.91 s, painted desktop in the
+  browser at 0.92 s (Asahi M2, measured; method in `docs/benchmark.md`).
+  A static desktop idles at 0.00% CPU (~41-43 MiB); a bash terminal alone
+  ~49-53 MiB; the live btop column ~59-60 MiB at ~1.2% with no viewer
+  (~2-4% with a viewer painting the damage).
 - **The look, live:** ginger-night by default (wallpaper, rings, bar,
   foot palette, launcher, cursor), with a live bar (window title, load,
   cpu, network) that still costs the bar process 0.00% CPU over 60 s idle.
