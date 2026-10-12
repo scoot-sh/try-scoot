@@ -389,11 +389,18 @@
     while :; do cut -d' ' -f1 /proc/loadavg; sleep 10; done
   '';
   barCpu = writeShellScriptBin "scoot-bar-cpu" ''
-    read -r _ a b c d e f g h _ < /proc/stat
+    # First sample: fail fast if /proc/stat is unreadable (the bar's exec
+    # module restarts the helper, showing the `...` placeholder meanwhile).
+    read -r _ a b c d e f g h guest guest_nice < /proc/stat || exit 1
+    # Total counts the first eight fields only (user nice system idle
+    # iowait irq softirq steal). guest/guest_nice are already included
+    # in user/nice (fs/proc/stat.c: guest time is accounted to
+    # CPUTIME_USER/CPUTIME_NICE as well as the separate GUEST counters),
+    # so adding them would double-count.
     pt=$((a + b + c + d + e + f + g + h)); pi=$((d + e))
     while :; do
       sleep 10
-      read -r _ a b c d e f g h _ < /proc/stat || continue
+      read -r _ a b c d e f g h guest guest_nice < /proc/stat || continue
       t=$((a + b + c + d + e + f + g + h)); i=$((d + e))
       dt=$((t - pt))
       if [ "$dt" -gt 0 ]; then printf '%s%%\n' "$((100 * (dt - (i - pi)) / dt))"; fi
