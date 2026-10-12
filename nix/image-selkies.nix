@@ -65,6 +65,8 @@
       xkeyboard_config
       fontconfig
       dejavu_fonts
+      pkgs.nerd-fonts.droid-sans-mono
+      pkgs.nerd-fonts.fira-code
       hicolor-icon-theme
       adwaita-icon-theme
       glib
@@ -80,6 +82,13 @@
       pulseaudio
       selkiesStack.selkies
       foot
+      # Show-it-off apps, same as the default image: neovim (unwrapped:
+      # the wrapper's providers cost ~190 MB NAR) and btop (the look's
+      # ginger-night theme), plus starship and bash-completion.
+      pkgs.neovim-unwrapped
+      pkgs.btop
+      pkgs.starship
+      pkgs.bash-completion
     ]
     ++ lib.optionals withDesktop [fuzzel scootbarPkg scootbgPkg scootPkg]
     ++ lib.optionals (withDesktop && withLook) [pkgs.vanilla-dmz];
@@ -93,7 +102,7 @@
   };
 
   fontsConf = pkgs.makeFontsConf {
-    fontDirectories = with pkgs; [dejavu_fonts];
+    fontDirectories = with pkgs; [dejavu_fonts pkgs.nerd-fonts.droid-sans-mono pkgs.nerd-fonts.fira-code];
   };
 
   wallpaperPng =
@@ -155,6 +164,9 @@
         [autostart]
         ${lib.optionalString withDesktop ''          commands = [
                   "spawn scoot-bar-look",
+                  # First-run columns, same as the default image.
+                  "spawn foot",
+                  "spawn foot btop",
                 ]''}
 
         [binds]
@@ -217,9 +229,10 @@
     if withLook
     then
       pkgs.writeText "scoot-bar.toml" ''
+        # Ginger-night bar, container subset (same as the default image).
         left = ["workspaces", "window-title"]
         center = ["clock"]
-        right = []
+        right = ["load", "cpu", "network"]
 
         [bar]
         height = ${toString ginger.barExample.bar.height}
@@ -248,11 +261,28 @@
         inactive-color = "${ginger.barExample.workspaces.inactive-color}"
 
         [window-title]
-        show-app-id = ${lib.boolToString ginger.barExample.window-title.show-app-id}
-        max-width = ${toString ginger.barExample.window-title.max-width}
+        icon = "${ginger.barExample."window-title".icon}"
+        show-app-id = ${lib.boolToString ginger.barExample."window-title".show-app-id}
+        max-width = ${toString ginger.barExample."window-title".max-width}
 
         [clock]
         format = "${ginger.barExample.clock.format}"
+        icon = "${ginger.barExample.clock.icon}"
+
+        [exec.load]
+        command = ["/usr/local/bin/scoot-bar-load"]
+        icon = "${ginger.barExample.exec.load.icon}"
+        placeholder = "..."
+
+        [exec.cpu]
+        command = ["/usr/local/bin/scoot-bar-cpu"]
+        icon = "${ginger.barExample.exec.cpu.icon}"
+        placeholder = "..."
+
+        [network]
+        icon-wifi = [${lib.concatMapStringsSep ", " (g: "\"${g}\"") ginger.barExample.network.icon-wifi}]
+        icon-ethernet = "${ginger.barExample.network.icon-ethernet}"
+        show-text = ${lib.boolToString ginger.barExample.network.show-text}
       ''
     else
       pkgs.writeText "scoot-bar.toml" ''
@@ -291,8 +321,26 @@
     layer = overlay
   '';
 
+  # Same Nerd-Font bar face as the default image (the module icons need it).
   barLookWrapper = writeShellScriptBin "scoot-bar-look" ''
-    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/truetype/DejaVuSans.ttf "$@"
+    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/opentype/NerdFonts/DroidSansM/DroidSansMNerdFontPropo-Regular.otf "$@"
+  '';
+
+  # Same tiny bar helpers as the default image (see nix/image.nix).
+  barLoad = writeShellScriptBin "scoot-bar-load" ''
+    while :; do cut -d' ' -f1 /proc/loadavg; sleep 10; done
+  '';
+  barCpu = writeShellScriptBin "scoot-bar-cpu" ''
+    read -r _ a b c d e f g h _ < /proc/stat
+    pt=$((a + b + c + d + e + f + g + h)); pi=$((d + e))
+    while :; do
+      sleep 10
+      read -r _ a b c d e f g h _ < /proc/stat || continue
+      t=$((a + b + c + d + e + f + g + h)); i=$((d + e))
+      dt=$((t - pt))
+      if [ "$dt" -gt 0 ]; then printf '%s%%\n' "$((100 * (dt - (i - pi)) / dt))"; fi
+      pt=$t; pi=$i
+    done
   '';
 
   fuzzelLookWrapper = writeShellScriptBin "fuzzel-look" ''
@@ -394,12 +442,20 @@
     cp ${barConfig} $out/defaults/bar.toml
     cp ${footConfig} $out/defaults/foot.ini
     cp ${fuzzelConfig} $out/defaults/fuzzel.ini
+    cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
+    cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
+    cp ${pkgs.writeText "btop.conf" ginger.btopConfText} $out/defaults/btop.conf
+    cp ${pkgs.writeText "ginger-night.theme" ginger.btopThemeText} $out/defaults/btop-theme.theme
     mkdir -p $out/usr/local/bin
     ${lib.optionalString withDesktop ''
       cp ${barLookWrapper}/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-look
+      cp ${barLoad}/bin/scoot-bar-load $out/usr/local/bin/scoot-bar-load
+      cp ${barCpu}/bin/scoot-bar-cpu $out/usr/local/bin/scoot-bar-cpu
       cp ${wtypeShim}/bin/wtype $out/usr/local/bin/wtype
-      chmod +x $out/usr/local/bin/scoot-bar-look $out/usr/local/bin/wtype
+      chmod +x $out/usr/local/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-load $out/usr/local/bin/scoot-bar-cpu $out/usr/local/bin/wtype
     ''}
+    mkdir -p $out/usr/share/doc/nerd-fonts
+    cp ${../rootfs/defaults/OFL.txt} $out/usr/share/doc/nerd-fonts/OFL.txt
     ${lib.optionalString (withDesktop && withLook) ''
       cp ${fuzzelLookWrapper}/bin/fuzzel-look $out/usr/local/bin/fuzzel-look
       chmod +x $out/usr/local/bin/fuzzel-look
@@ -430,6 +486,8 @@
       "XDG_SESSION_TYPE=wayland"
       "GDK_BACKEND=wayland"
       "TERMINAL=foot"
+      "EDITOR=nvim"
+      "VISUAL=nvim"
       "PULSE_SERVER=unix:/run/pulse/native"
       "SELKIES_UI_TITLE=try-scoot"
     ]

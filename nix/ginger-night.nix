@@ -5,7 +5,8 @@
 # the wallpaper store path), the example TOMLs for bar/scoot shape, the
 # foot palette file, the fuzzel CLI theme function, and the shared cursor.
 # Bumping the `scoot` flake input moves all of these together; nothing here
-# hand-copies a color except the DejaVu font swap (documented below).
+# hand-copies a color except the nvim CursorLine fill (#1A1512, the foot
+# palette's regular0, which the registry does not name).
 #
 # Takes `lib` (nixpkgs lib) and the scoot flake (`scootFlake.outPath` is its
 # source tree). Returns the look plus small derivations of it.
@@ -28,10 +29,36 @@ in {
   # Referenced, not vendored, so a scoot bump moves it; the
   # `look-no-third-party` check pins name+sha256 so any other image fails.
   wallpaperFile = ginger.wallpaper.image;
-  # Foot palette, read from the look's file with only the font swapped:
-  # the look tunes with FiraCode Nerd Font (not shipped: DejaVu is already
-  # in the closure, zero added bytes; Nerd glyphs are unused by the
-  # container bar's minimal modules). Pad, cursor style, palette and
-  # selection colors follow the look on bump.
-  footIni = lib.replaceStrings ["font=FiraCode Nerd Font:size=10.5"] ["font=DejaVu Sans Mono:size=11\ndpi-aware=no"] footExampleText;
+  # Foot palette, read from the look's file: the look tunes with FiraCode
+  # Nerd Font, which this image ships (see nix/image.nix), so the font line
+  # stays as the look wrote it. Only the shell is pinned: foot must launch
+  # bash explicitly (interactive, with ~/.bashrc), never sh.
+  footIni = lib.replaceStrings ["font=FiraCode Nerd Font:size=10.5"] ["font=FiraCode Nerd Font:size=10.5\nshell=/bin/bash"] footExampleText;
+  # Starship prompt and btop setup, read live from the look's own files so a
+  # scoot bump moves them with the palette (registry paths, not copies).
+  starshipText = builtins.readFile ginger.appFiles.starship;
+  btopConfText = builtins.readFile ginger.appFiles.btopConf;
+  btopThemeText = builtins.readFile ginger.appFiles.btopTheme;
+  # Neovim colors, generated from the look's registry palette (bar colors):
+  # near-black field, cream text, ginger accent, amber hover, dim separators,
+  # ember errors. No plugins, no network; truecolor for foot.
+  nvimInit = ''
+    " try-scoot nvim defaults (MIT): ginger-night palette, no plugins.
+    set termguicolors
+    set background=dark
+    syntax on
+    set number
+    set cursorline
+    set showmatch
+    hi Normal guibg=${ginger.barColors.background} guifg=${ginger.barColors.foreground}
+    hi Comment guifg=${ginger.barColors.dim}
+    hi LineNr guifg=${ginger.barColors.dim}
+    hi CursorLineNr guifg=${ginger.barColors.hover}
+    hi CursorLine guibg=#1A1512
+    hi StatusLine guibg=${ginger.barColors.accent} guifg=${ginger.barColors.background}
+    hi StatusLineNC guibg=${ginger.barColors.dim} guifg=${ginger.barColors.background}
+    hi Visual guibg=${ginger.barColors.hover} guifg=${ginger.barColors.background}
+    hi Search guibg=${ginger.barColors.hover} guifg=${ginger.barColors.background}
+    hi ErrorMsg guifg=${ginger.barColors.urgent}
+  '';
 }

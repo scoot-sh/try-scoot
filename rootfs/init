@@ -45,7 +45,14 @@ seed /defaults/bar.toml "$HOME/.config/scoot/bar.toml"
 seed /defaults/foot.ini "$HOME/.config/foot/foot.ini"
 seed /defaults/fuzzel.ini "$HOME/.config/fuzzel/fuzzel.ini"
 seed /defaults/wallpaper.png "$HOME/.config/scoot/wallpaper.png"
+seed /defaults/bashrc "$HOME/.bashrc"
+seed /defaults/bash_profile "$HOME/.bash_profile"
+seed /defaults/starship.toml "$HOME/.config/starship.toml"
+seed /defaults/nvim-init.vim "$HOME/.config/nvim/init.vim"
+seed /defaults/btop.conf "$HOME/.config/btop/btop.conf"
+seed /defaults/btop-theme.theme "$HOME/.config/btop/themes/ginger-night.theme"
 chown -R abc:abc /config/.config 2>/dev/null || true
+chown abc:abc /config/.bashrc /config/.bash_profile 2>/dev/null || true
 
 log "handing off to s6-svscan"
 exec /usr/bin/s6-svscan /etc/s6/service
