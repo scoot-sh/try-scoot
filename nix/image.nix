@@ -268,12 +268,13 @@
       pkgs.writeText "scoot-bar.toml" ''
         # Ginger-night bar, container subset: the look's floating shape,
         # colors and icons with the module set a container can back
-        # (workspaces + window title + clock, plus load/cpu/network on the
-        # right). Volume/battery need a sound server or hardware that is not
-        # here; the launcher buttons need apps that are not installed.
-        left = ["workspaces", "window-title"]
+        # (workspaces on the left, clock centered, window title plus
+        # load/cpu/network on the right). Volume/battery need a sound
+        # server or hardware that is not here; the launcher buttons need
+        # apps that are not installed.
+        left = ["workspaces"]
         center = ["clock"]
-        right = ["load", "cpu", "network"]
+        right = ["window-title", "load", "cpu", "network"]
 
         [bar]
         height = ${toString ginger.barExample.bar.height}
