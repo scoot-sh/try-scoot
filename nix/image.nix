@@ -36,6 +36,19 @@
   # wallpaper name+sha256 so any other image fails.
   ginger = import ./ginger-night.nix {inherit lib;} {inherit scootFlake;};
 
+  # btop 1.4.7 defaults `show_disks` to True, which splits the mem box to
+  # show a disks panel. A container exposes no block devices, so the panel
+  # renders empty; the look's btop.conf sets no such key. Force it off
+  # (replace if the look ever gains the key, else append).
+  btopConfFixed = runCommand "btop.conf" {} ''
+    cat ${pkgs.writeText "btop.conf.base" ginger.btopConfText} > $out
+    if grep -q '^show_disks' $out; then
+      sed -i 's/^show_disks.*/show_disks = False/' $out
+    else
+      echo 'show_disks = False' >> $out
+    fi
+  '';
+
   # WS->TCP bridge + static file server (replaces python websockify + numpy).
   # Pure Go stdlib, static: the runtime closure is just this binary.
   # go test (unit + malformed-frame battery; fuzz seeds run as unit tests)
@@ -497,7 +510,7 @@
     cp ${fuzzelConfig} $out/defaults/fuzzel.ini
     cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
     cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
-    cp ${pkgs.writeText "btop.conf" ginger.btopConfText} $out/defaults/btop.conf
+    cp ${btopConfFixed} $out/defaults/btop.conf
     cp ${pkgs.writeText "ginger-night.theme" ginger.btopThemeText} $out/defaults/btop-theme.theme
     mkdir -p $out/usr/local/bin
     cp ${barLookWrapper}/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-look
