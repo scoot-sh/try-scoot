@@ -5,10 +5,12 @@
 - L1 `image-l1`: L0 + `scootbar` + `scootbg` + `fuzzel` (the desktop profile
   packages from the scoot flake).
 - final `image-try-scoot`: L1 + the ginger-night look (the look's wallpaper
-  from the scoot flake input, `fit` on its black fill; foot palette, bar
-  colors/shape, scoot appearance/rings, fuzzel theme and cursor read from the
-  flake -- see `nix/ginger-night.nix`; DejaVu font and minimal bar modules
-  are the documented divergences).
+  from the scoot flake input, `fit` on its black fill; foot palette and
+  FiraCode Nerd Font, bar colors/shape with the look's load/cpu/network
+  modules and Nerd icons, scoot appearance/rings, fuzzel theme, starship
+  prompt, btop setup and cursor read from the flake -- see
+  `nix/ginger-night.nix`; volume/battery/buttons stay out: they need a
+  sound server, hardware, or apps not shipped here).
 
 ## Diet (reviewer §5 plan, implemented this round)
 
@@ -33,6 +35,24 @@ where estimated from the overall ratio (≈3.6x pre-diet).
 Headline after 1-5 (+openssl, +pin align): pull 596.0 MiB -> 176.9 MiB
 (-70%), unpacked 2.013 GiB -> 566.4 MiB (-73%), root closure 1.972 GiB ->
 554.6 MiB. Target (halve the pull) beaten by 2.3x.
+
+## Show-it-off delta (this round)
+
+Marginal NAR 127,347,152 B across 22 new store paths (closure of the added
+top-level packages minus what the image already carried):
+
+| added | NAR | pull delta share | why |
+|---|---|---|---|
+| FiraCode Nerd Font | 48,987,800 B | ~1/3 of the pull delta | the look's terminal face; one output, all weights; starship glyphs need it |
+| neovim-unwrapped | 34,067,320 B + ~17 MB tree-sitter/luajit/libuv | ~1/4 | the editor; unwrapped skips ~190 MB of perl/python providers |
+| starship | 14,678,024 B | small | the look's prompt |
+| DroidSansM Nerd Font Propo | 7,359,008 B | small | the bar's icons |
+| btop | 2,123,488 B | tiny | the look ships a theme for it |
+| bash-completion | 1,271,696 B | tiny | shell completion |
+
+Measured image delta: pull 187,027,379 B -> 243,961,884 B (+56,934,505 B,
++30.4%), unpacked 599,079,936 B -> 728,529,920 B (+129,449,984 B), matching
+the marginal NAR plus config bytes. Still 61% below the pre-diet pull.
 
 Method: root-env closure via `nix path-info --closure-size`; tarball bytes
 via `ls -l` on the built store tarball; unpacked via `docker export` (the
