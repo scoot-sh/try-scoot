@@ -13,5 +13,6 @@ until SOCK=( "$RUNTIME"/wayland-* ) && [ "${#SOCK[@]}" -gt 0 ] && [ -S "${SOCK[0
 shopt -u nullglob
 PARENT="$(basename "${SOCK[0]}")"
 echo "[de] compositor socket $PARENT; starting nested scoot"
+cd "${HOME:-/config}"
 exec s6-setuidgid abc env WAYLAND_DISPLAY="$PARENT" XDG_RUNTIME_DIR="$RUNTIME" HOME=/config \
   bash /defaults/startwm-selkies.sh
