@@ -28,11 +28,26 @@
 
   # Ginger-night look, read live from the scoot flake input (see
   # nix/ginger-night.nix): colors, wallpaper file, bar/scoot shapes, foot
-  # palette, fuzzel flags and cursor all follow the scoot bump. Only the
-  # DejaVu font swap and the minimal module subset diverge (documented in
-  # README/docs); the `look-no-third-party` check pins the wallpaper
-  # name+sha256 so any other image fails.
+  # palette and font, fuzzel flags, starship prompt, btop setup and cursor
+  # all follow the scoot bump. The bar carries the look's own module set
+  # where a container can back it (load/cpu/network; volume/battery need a
+  # sound server or hardware that is not here) and the look's own icons via
+  # the shipped Nerd fonts; the `look-no-third-party` check pins the
+  # wallpaper name+sha256 so any other image fails.
   ginger = import ./ginger-night.nix {inherit lib;} {inherit scootFlake;};
+
+  # btop 1.4.7 defaults `show_disks` to True, which splits the mem box to
+  # show a disks panel. A container exposes no block devices, so the panel
+  # renders empty; the look's btop.conf sets no such key. Force it off
+  # (replace if the look ever gains the key, else append).
+  btopConfFixed = runCommand "btop.conf" {} ''
+    cat ${pkgs.writeText "btop.conf.base" ginger.btopConfText} > $out
+    if grep -q '^show_disks' $out; then
+      sed -i 's/^show_disks.*/show_disks = False/' $out
+    else
+      echo 'show_disks = False' >> $out
+    fi
+  '';
 
   # WS->TCP bridge + static file server (replaces python websockify + numpy).
   # Pure Go stdlib, static: the runtime closure is just this binary.
@@ -98,6 +113,8 @@
       libgbm
       fontconfig
       dejavu_fonts
+      pkgs.nerd-fonts.droid-sans-mono
+      pkgs.nerd-fonts.fira-code
       hicolor-icon-theme
       adwaita-icon-theme
       glib
@@ -106,6 +123,14 @@
       wayvnc
       wsbridge
       foot
+      # Show-it-off apps: neovim (unwrapped: the wrapper's perl/python
+      # providers cost ~190 MB NAR for nothing this image's plugin-free
+      # config can use) and btop (the look ships a ginger-night theme for
+      # it), plus starship (the look's prompt) and bash-completion.
+      pkgs.neovim-unwrapped
+      pkgs.btop
+      pkgs.starship
+      pkgs.bash-completion
     ]
     ++ lib.optionals needLauncher [fuzzel]
     ++ lib.optionals needBar [scootbarPkg]
@@ -126,7 +151,10 @@
   };
 
   fontsConf = pkgs.makeFontsConf {
-    fontDirectories = with pkgs; [dejavu_fonts];
+    # DejaVu stays (fallback coverage, already in the closure); the Nerd
+    # fonts are the look's own faces: DroidSansM Nerd Font Propo for the
+    # bar's icons, FiraCode Nerd Font for foot (and the starship glyphs).
+    fontDirectories = with pkgs; [dejavu_fonts pkgs.nerd-fonts.droid-sans-mono pkgs.nerd-fonts.fira-code];
   };
 
   # Wallpaper: ginger-night's own file when the look is on (referenced from
@@ -187,6 +215,12 @@
         [autostart]
         ${lib.optionalString needBar ''          commands = [
                   "spawn scoot-bar-look",
+                  # First-run columns: a bash terminal (the welcome prints
+                  # from ~/.bashrc) beside btop. Both are plain `spawn`s,
+                  # so startup costs one extra foot over the old single
+                  # terminal; see docs/benchmark.md.
+                  "spawn foot",
+                  "spawn foot btop",
                 ]''}
 
         [binds]
@@ -245,14 +279,15 @@
     if withLook
     then
       pkgs.writeText "scoot-bar.toml" ''
-        # Ginger-night bar, container subset: the look's floating shape and
-        # colors with a minimal module set (workspaces + window title +
-        # clock). The look's load/cpu/network/volume/battery/buttons need
-        # daemons or scripts not shipped here; icons are omitted (the look
-        # tunes with a Nerd Font, the image ships DejaVu only).
-        left = ["workspaces", "window-title"]
+        # Ginger-night bar, container subset: the look's floating shape,
+        # colors and icons with the module set a container can back
+        # (workspaces on the left, clock centered, window title plus
+        # load/cpu/network on the right). Volume/battery need a sound
+        # server or hardware that is not here; the launcher buttons need
+        # apps that are not installed.
+        left = ["workspaces"]
         center = ["clock"]
-        right = []
+        right = ["window-title", "load", "cpu", "network"]
 
         [bar]
         height = ${toString ginger.barExample.bar.height}
@@ -281,11 +316,28 @@
         inactive-color = "${ginger.barExample.workspaces.inactive-color}"
 
         [window-title]
-        show-app-id = ${lib.boolToString ginger.barExample.window-title.show-app-id}
-        max-width = ${toString ginger.barExample.window-title.max-width}
+        icon = "${ginger.barExample."window-title".icon}"
+        show-app-id = ${lib.boolToString ginger.barExample."window-title".show-app-id}
+        max-width = ${toString ginger.barExample."window-title".max-width}
 
         [clock]
         format = "${ginger.barExample.clock.format}"
+        icon = "${ginger.barExample.clock.icon}"
+
+        [exec.load]
+        command = ["/usr/local/bin/scoot-bar-load"]
+        icon = "${ginger.barExample.exec.load.icon}"
+        placeholder = "..."
+
+        [exec.cpu]
+        command = ["/usr/local/bin/scoot-bar-cpu"]
+        icon = "${ginger.barExample.exec.cpu.icon}"
+        placeholder = "..."
+
+        [network]
+        icon-wifi = [${lib.concatMapStringsSep ", " (g: "\"${g}\"") ginger.barExample.network.icon-wifi}]
+        icon-ethernet = "${ginger.barExample.network.icon-ethernet}"
+        show-text = ${lib.boolToString ginger.barExample.network.show-text}
       ''
     else
       pkgs.writeText "scoot-bar.toml" ''
@@ -324,8 +376,36 @@
     layer = overlay
   '';
 
+  # The look tunes the bar with DroidSansM Nerd Font Propo (the glyphs the
+  # module icons need); point the daemon at the shipped file.
   barLookWrapper = writeShellScriptBin "scoot-bar-look" ''
-    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/truetype/DejaVuSans.ttf "$@"
+    exec ${scootbarPkg}/bin/scootbar daemon --font /usr/share/fonts/opentype/NerdFonts/DroidSansM/DroidSansMNerdFontPropo-Regular.otf "$@"
+  '';
+
+  # Bar helpers, written fresh for this repo (MIT): the bar streams, it does
+  # not poll, so each script prints first and loops with a coarse sleep.
+  # Load average every 10 s, CPU percent every 10 s from /proc/stat deltas.
+  barLoad = writeShellScriptBin "scoot-bar-load" ''
+    while :; do cut -d' ' -f1 /proc/loadavg; sleep 10; done
+  '';
+  barCpu = writeShellScriptBin "scoot-bar-cpu" ''
+    # First sample: fail fast if /proc/stat is unreadable (the bar's exec
+    # module restarts the helper, showing the `...` placeholder meanwhile).
+    read -r _ a b c d e f g h guest guest_nice < /proc/stat || exit 1
+    # Total counts the first eight fields only (user nice system idle
+    # iowait irq softirq steal). guest/guest_nice are already included
+    # in user/nice (fs/proc/stat.c: guest time is accounted to
+    # CPUTIME_USER/CPUTIME_NICE as well as the separate GUEST counters),
+    # so adding them would double-count.
+    pt=$((a + b + c + d + e + f + g + h)); pi=$((d + e))
+    while :; do
+      sleep 10
+      read -r _ a b c d e f g h guest guest_nice < /proc/stat || continue
+      t=$((a + b + c + d + e + f + g + h)); i=$((d + e))
+      dt=$((t - pt))
+      if [ "$dt" -gt 0 ]; then printf '%s%%\n' "$((100 * (dt - (i - pi)) / dt))"; fi
+      pt=$t; pi=$i
+    done
   '';
 
   # Themed launcher: fuzzel with the look's colors as CLI flags (the same
@@ -435,10 +515,20 @@
     cp ${barConfig} $out/defaults/bar.toml
     cp ${footConfig} $out/defaults/foot.ini
     cp ${fuzzelConfig} $out/defaults/fuzzel.ini
+    cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
+    cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
+    cp ${btopConfFixed} $out/defaults/btop.conf
+    cp ${pkgs.writeText "ginger-night.theme" ginger.btopThemeText} $out/defaults/btop-theme.theme
     mkdir -p $out/usr/local/bin
     cp ${barLookWrapper}/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-look
+    cp ${barLoad}/bin/scoot-bar-load $out/usr/local/bin/scoot-bar-load
+    cp ${barCpu}/bin/scoot-bar-cpu $out/usr/local/bin/scoot-bar-cpu
     cp ${wtypeShim}/bin/wtype $out/usr/local/bin/wtype
-    chmod +x $out/usr/local/bin/scoot-bar-look $out/usr/local/bin/wtype
+    chmod +x $out/usr/local/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-load $out/usr/local/bin/scoot-bar-cpu $out/usr/local/bin/wtype
+    # Nerd Fonts ride under OFL-1.1: carry the license text in the image
+    # (the nixpkgs font packages ship no license file).
+    mkdir -p $out/usr/share/doc/nerd-fonts
+    cp ${../rootfs/defaults/OFL.txt} $out/usr/share/doc/nerd-fonts/OFL.txt
     ${lib.optionalString withLook ''
       cp ${fuzzelLookWrapper}/bin/fuzzel-look $out/usr/local/bin/fuzzel-look
       chmod +x $out/usr/local/bin/fuzzel-look
@@ -465,6 +555,8 @@
       "XDG_SESSION_TYPE=wayland"
       "GDK_BACKEND=wayland"
       "TERMINAL=foot"
+      "EDITOR=nvim"
+      "VISUAL=nvim"
     ]
     ++ lib.optionals withLook [
       "XCURSOR_THEME=${ginger.cursor.name}"

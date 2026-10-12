@@ -27,7 +27,14 @@ until [ -S "$RUNTIME/$NAME" ]; do sleep 0.5; done
 LISTEN="${VNC_LISTEN:-localhost}"
 PORT="${VNC_PORT:-5900}"
 FPS="${VNC_FPS:-30}"
-ARGS=(-f "$FPS")
+# -r (render cursor): scoot's headless output serves cursorless frames
+# unless the capture requests PAINT_CURSORS (ext-image-copy-capture), so
+# without this the VNC stream never carries pointer pixels. With it the
+# real cursor is baked into frames (verified: raw-RFB frame diff shows the
+# arrow at the pointer, headless-Chrome noVNC screenshot shows it too).
+# No cursor *shape* is sent either way (scoot refuses pointer-cursor
+# sessions), so the noVNC dot fallback stays as the local-cursor cover.
+ARGS=(-r -f "$FPS")
 [ -n "${VNC_KEYBOARD:-}" ] && ARGS+=(-k "$VNC_KEYBOARD")
 
 # wayvnc accepts "address:port" ([::]:port for IPv6); a bare VNC_LISTEN gets

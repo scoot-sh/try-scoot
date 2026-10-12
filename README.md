@@ -5,30 +5,52 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 # try-scoot
 
-![scoot's ginger-night look in try-scoot: cream terminal with a ginger ring on near-black, the cat-peeking wallpaper at the right, floating bar with workspaces and clock](docs/ginger-night-preview.webp)
+![scoot's ginger-night desktop in try-scoot: a live btop column beside a welcome terminal, the floating bar with workspaces left, clock centered and window title, load, cpu and network on the right, the cat-peeking wallpaper at the right](docs/show-it-off.png)
 
 The smallest fast way to try scoot: a lightweight desktop running the scoot
 compositor from the scoot flake, in your browser. No GPU needed (scoot's
 CPU renderer tier, software capture); no client install.
 
+- **Tiny:** 232.7 MiB pull, 694.8 MiB unpacked (`docker export`), with a
+  terminal, launcher, bar, wallpaper, bash + starship, neovim and btop
+  inside. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
+  new apps and fonts add 54.3 MiB pull over the lean baseline, itemized in
+  `docs/layers.md`.
+- **Fast:** `docker run` to capturing in 0.91 s, painted desktop in the
+  browser at 0.92 s (Asahi M2, measured; method in `docs/benchmark.md`).
+  A static desktop idles at 0.00% CPU (~41-43 MiB); a bash terminal alone
+  ~49-53 MiB; the live btop column ~59-60 MiB at ~1.2% with no viewer
+  (~2-4% with a viewer painting the damage).
+- **The look, live:** ginger-night by default (wallpaper, rings, bar,
+  foot palette, launcher, cursor), with a live bar (window title, load,
+  cpu, network) that still costs the bar process 0.00% CPU over 60 s idle.
+- **Agent-drivable:** every pixel of `docs/benchmark.md` was driven over
+  `scoot msg` (key, pointer, type, screenshot) from outside the
+  container; remote `Alt/Super+Return` chords fire over VNC too.
+- **Scrolling columns:** `Super+h/l` moves between the terminal and btop
+  columns above; `Super+d` opens the themed launcher (btop, foot, neovim
+  all listed).
+
 What you see is scoot's `ginger-night` look (the cat-peeking desktop
 default, black field with one ginger accent): the wallpaper placed with
 `scootbg` `fit` on its black fill so the cat is never cropped, ginger
-focus rings, the floating translucent bar, the foot palette, the themed
-launcher and the Vanilla-DMZ cursor. The look is read live from the scoot
-flake input (`docs/examples/ginger-night/` plus the `ginger-night` entry in
+focus rings, the floating translucent bar with the look's own icons (via
+the shipped DroidSansM Nerd Font Propo), the foot palette in the look's
+FiraCode Nerd Font, the themed launcher and the Vanilla-DMZ cursor. The
+look is read live from the scoot flake input
+(`docs/examples/ginger-night/` plus the `ginger-night` entry in
 `nix/modules/desktop.nix`), so bumping `inputs.scoot` moves the image with
-it; see `nix/ginger-night.nix` for exactly what follows. Two deliberate
-divergences: the terminal font stays DejaVu Sans Mono (the look tunes with
-FiraCode Nerd Font, not shipped) and the bar keeps a minimal module set
-(workspaces + window title + clock, no Nerd-glyph icons or load/cpu
-daemons). Full screenshots in `docs/ginger-night-default.png` (VNC) and
-`docs/ginger-night-selkies.png` (Selkies, same desktop).
+it; see `nix/ginger-night.nix` for exactly what follows. One deliberate
+divergence: volume/battery modules and launcher buttons need a sound
+server, hardware, or apps that are not in this container, so the bar
+carries the look's load/cpu/network subset. Full screenshots in
+`docs/ginger-night-default.png` (VNC) and `docs/ginger-night-selkies.png`
+(Selkies, same desktop).
 
 What drove scoot: a no-GPU webtop you can open in a browser, and a desktop an
 agent can drive as easily as a person (scoot's control socket). This image is
-the "try it" visit: a terminal, the launcher, the bar, and the ginger-night
-look. Nothing else.
+the "try it" visit: a welcome terminal, btop, the launcher, the bar, and the ginger-night
+look, with neovim on board.
 
 ## Look
 
@@ -38,11 +60,11 @@ another look would need its whole registry in the image (palettes, app
 files, wallpaper bytes for five looks) plus a runtime switch that re-seeds
 every config; the image instead reads the one look from the flake at build
 time and follows it on bump. To try a different look, run scoot itself with
-that example's files (see the look's README in the scoot repo). Out of
-scope by design: per-look wallpapers beyond ginger-night's CatPeeking file
+that example's files (see the look's README in the scoot repo). Out of scope by design: per-look wallpapers beyond ginger-night's CatPeeking file
 (the `look-no-third-party` check pins it by name and sha256 so any other
-image fails), Nerd-Font icons, and the look's load/cpu/network/volume
-daemons.
+image fails), and the look's volume/battery backends and launcher buttons
+(they need a sound server, hardware, or desktop apps this container does
+not have).
 
 ## Run
 
@@ -51,7 +73,10 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 ```
 
 Open `http://localhost:6080/`. The page forwards to the noVNC client
-(autoconnect, scale to window, reconnect). Native VNC clients use port 5900,
+(autoconnect, scale to window, reconnect). The pointer is visible: wayvnc
+runs with `-r`, so the frames carry the arrow, and noVNC adds a small dot
+that tracks the pointer with no latency, because scoot sends no cursor
+shape -- see `docs/benchmark.md`. Native VNC clients use port 5900,
 which binds container loopback by default: publishing it with
 `-p 5900:5900` alone is not enough (the listener stays on loopback, so the
 mapping accepts then EOFs) -- add `-e VNC_LISTEN=0.0.0.0` to reach it from
@@ -61,7 +86,9 @@ The one-liner above is the whole story: the image needs no `--shm-size`
 (the browser-side canvas lives in the *host* browser, and the container runs
 fine with the runtime default) and no named volume (a `/config` volume only
 matters if you want your config edits to survive `--rm`;
-add `-v try-scoot-config:/config` for that).
+add `-v try-scoot-config:/config` for that). An existing `try-scoot-config`
+volume keeps your old shell defaults until you drop it (new defaults land
+only on fresh volumes).
 
 Size it with `VNC_WIDTH`/`VNC_HEIGHT` (default `1280x800`). `VNC_FPS`
 (default `30`) caps the capture rate. `VNC_KEYBOARD` picks a wayvnc keyboard
@@ -164,11 +191,13 @@ docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
 docker logs <container>  # generated password (use the last GENERATED line); open http://localhost:8080/
 ```
 
-Trade-offs, measured (see docs/selkies.md for method): ~491 MiB pull and
-~1.63 GiB unpacked (vs ~177 MiB / ~566 MiB for this tag), ~0.2% / ~119
-MiB idle without a viewer (vs ~0% / ~43 MiB) and 27-48% / ~143 MiB with
+Trade-offs, measured (see docs/selkies.md for method): ~546 MiB pull and
+~1.75 GiB unpacked (vs ~233 MiB / ~695 MiB for this tag: the same
+apps+fonts delta), 0.20% / ~141 MiB idle without a viewer and 27-48% /
+~143 MiB with
 a viewer attached and actively streaming (software x264 at 60 fps -- the
-expected cost), `docker run` to painted desktop ~2 s in a
+expected cost; viewer-attached figures are the prior round, the live btop
+column adds a few percent on top), `docker run` to painted desktop ~2 s in a
 browser. What you gain is audio (VNC has none) and H.264 motion
 efficiency; what you pay is a bigger image (the GL + Python + PulseAudio
 stack the VNC tag deleted on purpose), a busier streaming idle, and a
@@ -221,4 +250,6 @@ modules: it seeds plain config files.
 `yackey-labs/nixos-webtop` is the inspiration, not the source: it taught us
 the pieces (flake-built images, headless scoot + wayvnc + noVNC, input and
 look seeding), but every file here is written fresh for this repo under MIT.
-No browser, file manager, or dev tools ship here beyond the "try it" visit.
+The image ships a terminal, launcher, bar, wallpaper, bash + starship,
+neovim and btop: the "try it" visit, nothing heavier (no browser, no file
+manager).
