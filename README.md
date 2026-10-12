@@ -73,9 +73,10 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 ```
 
 Open `http://localhost:6080/`. The page forwards to the noVNC client
-(autoconnect, scale to window, reconnect, plus a dot cursor: scoot's
-headless output carries no cursor into VNC frames, so without the dot the
-pointer would be invisible -- see `docs/benchmark.md`). Native VNC clients use port 5900,
+(autoconnect, scale to window, reconnect). The pointer is visible: wayvnc
+runs with `-r`, so the frames carry the arrow, and noVNC adds a small dot
+that tracks the pointer with no latency, because scoot sends no cursor
+shape -- see `docs/benchmark.md`. Native VNC clients use port 5900,
 which binds container loopback by default: publishing it with
 `-p 5900:5900` alone is not enough (the listener stays on loopback, so the
 mapping accepts then EOFs) -- add `-e VNC_LISTEN=0.0.0.0` to reach it from
