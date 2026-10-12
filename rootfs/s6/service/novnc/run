@@ -42,12 +42,19 @@ if [ ! -f "$WEBDIR/vnc.html" ]; then
   rm -rf "$WEBDIR"
   mkdir -p "$WEBDIR"
   cp -rL /usr/share/webapps/novnc/. "$WEBDIR"/
+  # show_dot=true: scoot --headless never composites a cursor into
+  # screencopy frames (see scoot render/capture_cursor.rs), so wayvnc sends
+  # no cursor shape and noVNC would hide the local pointer (cursor:none)
+  # with nothing drawn -- an invisible mouse. The dot is noVNC's designed
+  # fallback for exactly this: a small dot that tracks the pointer, shown
+  # only while the server cursor is fully transparent. A real cursor shape
+  # from the server (if scoot ever provides one) replaces it automatically.
   cat > "$WEBDIR/index.html" <<'HTML'
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&amp;resize=scale&amp;reconnect=true">
+<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&amp;resize=scale&amp;reconnect=true&amp;show_dot=true">
 <title>try-scoot</title></head>
-<body><p><a href="vnc.html?autoconnect=true&amp;resize=scale&amp;reconnect=true">Open the desktop</a></p></body></html>
+<body><p><a href="vnc.html?autoconnect=true&amp;resize=scale&amp;reconnect=true&amp;show_dot=true">Open the desktop</a></p></body></html>
 HTML
 fi
 

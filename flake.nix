@@ -76,6 +76,20 @@
     });
 
     checks = forAllSystems (pkgs: {
+      cursor-dot-fallback = pkgs.runCommand "cursor-dot-fallback-check" {nativeBuildInputs = [pkgs.coreutils];} ''
+        echo "checking noVNC redirect keeps the dot-cursor fallback"
+        # scoot --headless never composites a cursor into screencopy
+        # frames, so wayvnc sends no cursor shape and noVNC hides the
+        # local pointer (cursor:none) with nothing drawn: an invisible
+        # mouse. show_dot=true is the image-side workaround (a dot that
+        # tracks the pointer while the server cursor is transparent); a
+        # redirect without it regresses the user-reported bug.
+        if ! grep -q "show_dot=true" ${./rootfs/s6/service/novnc/run}; then
+          echo "rootfs/s6/service/novnc/run lost show_dot=true (invisible mouse regression)" >&2
+          exit 1
+        fi
+        touch $out
+      '';
       look-no-third-party = pkgs.runCommand "look-no-third-party-check" {nativeBuildInputs = [pkgs.coreutils];} ''
         echo "checking repo for third-party images"
         if grep -riE "wallhaven|chillhop|pixabay|unsplash" ${./nix} ${./rootfs} 2>/dev/null; then
