@@ -24,8 +24,13 @@
       scootPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scoot;
       scootbgPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootbg;
       scootbarPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootbar;
+      # Mocu is scoot's default cursor theme since v0.2.1 (built from the
+      # same vendored SVGs the compositor draws as its built-in fallback;
+      # see scoot's nix/mocu-cursor-theme.nix). The look names it via
+      # theme-look.nix, so this package is what provides that name.
+      mocuPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.mocu-cursor-theme;
       mkImage = pkgs.callPackage ./nix/image.nix {
-        inherit scootPkg scootbgPkg scootbarPkg;
+        inherit scootPkg scootbgPkg scootbarPkg mocuPkg;
         scootFlake = scoot;
       };
       image-l0 = mkImage {
@@ -55,7 +60,7 @@
       selkiesStack = pkgs.callPackage ./nix/selkies-stack.nix {};
       selkies = selkiesStack.selkies;
       mkSelkiesImage = pkgs.callPackage ./nix/image-selkies.nix {
-        inherit scootPkg scootbgPkg scootbarPkg selkiesStack;
+        inherit scootPkg scootbgPkg scootbarPkg mocuPkg selkiesStack;
         scootFlake = scoot;
       };
       image-selkies-l0 = mkSelkiesImage {

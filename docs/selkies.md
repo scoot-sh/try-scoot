@@ -195,6 +195,8 @@ container for unpacked, `docker stats` after a 30 s settle for idle).
 | VNC (`:latest`, scoot `134e39a`, ginger-night) | 186,881,227 B (178.2 MiB) | 598,816,768 B (571.1 MiB) | 0.00% / 59.9 MiB (no viewer, 2 windows) |
 | Selkies L0 (compositor only) | 494,742,034 B (471.8 MiB) | 1,686,177,792 B (1.571 GiB) | 0.18% / 71.7 MiB (no viewer; prior round) |
 | Selkies full (`:selkies`, ginger-night) | 515,831,613 B (492.0 MiB) | 1,753,213,440 B (1.633 GiB) | 0.19–0.27% / ~119 MiB (no viewer); 27–48% / ~143 MiB (viewer attached, static screen, actively streaming) |
+| Selkies L0 at scoot v0.2.1 | 551,564,522 B (526.0 MiB) | _n/a (pull only)_ | _n/a_ |
+| Selkies full at scoot v0.2.1 | 622,264,070 B (593.4 MiB) | 2,030,473,728 B (1.891 GiB) | _n/a (same desktop as prior round; idle behavior unchanged by the bump)_ |
 
 Reviewed baselines: the default tag's pre-#2 numbers were 185,480,055 B
 pull and 593,971,200 B unpacked (revts4, byte-exact); PR #2's scoot bump

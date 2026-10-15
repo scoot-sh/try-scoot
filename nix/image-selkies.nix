@@ -23,6 +23,7 @@
   scootPkg,
   scootbgPkg,
   scootbarPkg,
+  mocuPkg,
   selkiesStack,
   scootFlake,
 }: {
@@ -91,7 +92,8 @@
       pkgs.bash-completion
     ]
     ++ lib.optionals withDesktop [fuzzel scootbarPkg scootbgPkg scootPkg]
-    ++ lib.optionals (withDesktop && withLook) [pkgs.vanilla-dmz];
+    # Mocu, scoot's default cursor theme since v0.2.1 (see nix/image.nix).
+    ++ lib.optionals (withDesktop && withLook) [mocuPkg];
 
   rootEnv = buildEnv {
     name = "${name}-root-env";

@@ -11,6 +11,7 @@
   scootPkg,
   scootbgPkg,
   scootbarPkg,
+  mocuPkg,
   scootFlake,
 }: {
   name,
@@ -135,7 +136,13 @@
     ++ lib.optionals needLauncher [fuzzel]
     ++ lib.optionals needBar [scootbarPkg]
     ++ lib.optionals needBg [scootbgPkg]
-    ++ lib.optionals withLook [pkgs.vanilla-dmz]
+    # Mocu, scoot's default cursor theme since v0.2.1: the name the look's
+    # cursor_theme/XCURSOR_THEME carry (via theme-look.nix) has to resolve
+    # to files in the image, and this is the package that provides them
+    # (Mocu white, the configured theme; ~1.1 MB NAR, smaller than the
+    # Vanilla-DMZ it replaces -- the package's `black` output with
+    # Mocu-Black stays out). Follows the scoot bump like the rest.
+    ++ lib.optionals withLook [mocuPkg]
     ++ [scootPkg];
 
   rootEnv = buildEnv {
