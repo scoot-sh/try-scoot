@@ -54,6 +54,19 @@ Measured image delta: pull 187,027,379 B -> 243,967,344 B (+56,939,964 B,
 +30.4%), unpacked 599,079,936 B -> 728,530,944 B (+129,451,008 B), matching
 the marginal NAR plus config bytes. Still 61% below the pre-diet pull.
 
+## scoot v0.2.1 bump (this round)
+
+Root-env closure NAR +149,535,112 B, pull +50,227,084 B (+20.6%); full
+numbers in docs/benchmark.md. Almost all of it is scoot's own single-build
+closure (the Xwayland server runtime now on scoot's `PATH`, plus the
+compiled-in xwayland/gpu-scanout code): diet step 1's mesa cut still holds
+for the image's own `basePackages` (wayvnc still needs only `libgbm.so.1`,
+foot still links no GL), and the Xwayland runtime is kept deliberately --
+it is scoot's published shape since 0.2.1, not a dependency the image can
+drop without forking scoot. Partly offset by the cursor swap
+(vanilla-dmz -> Mocu, -2,399,376 B NAR). L0 279,484,262 B, L1 293,156,814 B:
+the diet steps still build the solid-plum path in the same shape.
+
 Why FiraCode Nerd Font ships whole instead of a subset: a Nerd-Font subset would break the look's icon coverage on the next scoot bump (any new glyph the look adopts would need re-subsetting, and foot, starship and the bar each draw from different corners of the font), so the image carries the font package as nixpkgs ships it -- one output, all weights -- and follows the look on bump rather than pinning a glyph list that silently rots.
 
 Method: root-env closure via `nix path-info --closure-size`; tarball bytes

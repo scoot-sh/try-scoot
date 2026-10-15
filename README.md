@@ -7,19 +7,20 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 
 ![scoot's ginger-night desktop in try-scoot: a live btop column beside a welcome terminal, the floating bar with workspaces left, clock centered and window title, load, cpu and network on the right, the cat-peeking wallpaper at the right](docs/show-it-off.png)
 
-The smallest fast way to try scoot: a lightweight desktop running the scoot
-compositor from the scoot flake, in your browser. No GPU needed (scoot's
-CPU renderer tier, software capture); no client install.
+The smallest fast way to try scoot: a lightweight desktop running scoot
+v0.2.1 from the scoot flake, in your browser. No GPU needed (scoot's `auto`
+renderer resolves to the CPU tier here; software capture); no client install.
 
-- **Tiny:** 232.7 MiB pull, 694.8 MiB unpacked (`docker export`), with a
+- **Tiny:** 280.6 MiB pull, 839.4 MiB unpacked (`docker export`), with a
   terminal, launcher, bar, wallpaper, bash + starship, neovim and btop
-  inside. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
-  new apps and fonts add 54.3 MiB pull over the lean baseline, itemized in
-  `docs/layers.md`.
+  inside, on scoot v0.2.1. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
+  show-it-off apps and fonts add ~54 MiB pull over the lean baseline and the
+  scoot v0.2.1 bump adds ~50 MiB more (the Xwayland server runtime now carried
+  in scoot's own closure), itemized in `docs/layers.md`.
 - **Fast:** `docker run` to capturing in 0.91 s, painted desktop in the
   browser at 0.92 s (Asahi M2, measured; method in `docs/benchmark.md`).
-  A static desktop idles at 0.00% CPU (~41-43 MiB); a bash terminal alone
-  ~49-53 MiB; the live btop column ~59-60 MiB at ~1.2% with no viewer
+  A static desktop idles at 0.00% CPU (~40 MiB); a bash terminal alone
+  ~52 MiB; the live btop column ~60-62 MiB at ~1.5-3% with no viewer
   (~2-4% with a viewer painting the damage).
 - **The look, live:** ginger-night by default (wallpaper, rings, bar,
   foot palette, launcher, cursor), with a live bar (window title, load,
@@ -36,7 +37,9 @@ default, black field with one ginger accent): the wallpaper placed with
 `scootbg` `fit` on its black fill so the cat is never cropped, ginger
 focus rings, the floating translucent bar with the look's own icons (via
 the shipped DroidSansM Nerd Font Propo), the foot palette in the look's
-FiraCode Nerd Font, the themed launcher and the Vanilla-DMZ cursor. The
+FiraCode Nerd Font, the themed launcher and the Mocu cursor (scoot's default
+cursor theme: white at its native 24 px, the same art the compositor draws
+as its built-in fallback). The
 look is read live from the scoot flake input
 (`docs/examples/ginger-night/` plus the `ginger-night` entry in
 `nix/modules/desktop.nix`), so bumping `inputs.scoot` moves the image with
@@ -191,9 +194,9 @@ docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
 docker logs <container>  # generated password (use the last GENERATED line); open http://localhost:8080/
 ```
 
-Trade-offs, measured (see docs/selkies.md for method): ~546 MiB pull and
-~1.75 GiB unpacked (vs ~233 MiB / ~695 MiB for this tag: the same
-apps+fonts delta), 0.20% / ~141 MiB idle without a viewer and 27-48% /
+Trade-offs, measured (see docs/selkies.md for method): ~593 MiB pull and
+~1.89 GiB unpacked (vs ~281 MiB / ~839 MiB for this tag: the same
+apps+fonts delta plus the same scoot v0.2.1 bump), 0.20% / ~141 MiB idle without a viewer and 27-48% /
 ~143 MiB with
 a viewer attached and actively streaming (software x264 at 60 fps -- the
 expected cost; viewer-attached figures are the prior round, the live btop

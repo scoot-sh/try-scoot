@@ -16,10 +16,11 @@ docs/layers.md; the headline before/after is:
 | ginger-night default (scoot `134e39a`) | 186,881,227 B (178.2 MiB) | 598,816,768 B (571.1 MiB) |
 | this head, measured on the branch (lean baseline rebuilt: scoot `722afd2`) | 187,027,379 B (178.4 MiB) | 599,079,936 B (571.3 MiB) |
 | this head (show-it-off: fonts, bar modules, bash+starship, nvim+btop) | 243,967,344 B (232.7 MiB) | 728,530,944 B (694.8 MiB) |
+| this head (scoot `v0.2.1` / `e5b9dd6`: one default build, Mocu cursor) | 294,188,906 B (280.6 MiB) | 880,126,976 B (839.4 MiB) |
 
 Pull +1,394,334 B (+0.75%) for the look: the 926,588 B wallpaper (already
 optimally compressed upstream, so it rides almost byte-for-byte) plus the
-Vanilla-DMZ cursor theme (~3.3 MB unpacked) and larger configs. Unpacked
+Mocu cursor theme (~1.1 MB NAR, both Mocu white and Mocu-Black) and larger configs. Unpacked
 +3.2 MB for the same reason. No diet regression: L0/L1 still build the old
 solid-plum path byte-identical in shape.
 
@@ -34,6 +35,23 @@ starship 14,678,024 B, DroidSansM Nerd Font Propo 7,359,008 B (the bar's
 icons), btop 2,123,488 B, bash-completion 1,271,696 B. Per-step table in
 docs/layers.md. Still 61% below the pre-diet pull.
 
+scoot v0.2.1 bump delta (same-box rebuilds on the dev VM, aarch64; the old
+rev rebuilt at `20bca8a` gives 243,961,822 B pull, within 62 B of the M2
+number above, so cross-builder tarballs compare): pull 243,961,822 B ->
+294,188,906 B (+50,227,084 B, +20.6%), unpacked 728,529,920 B ->
+880,126,976 B (+151,597,056 B, +20.8%). Marginal root-env NAR +149,535,112 B
+(713,050,040 B -> 862,585,152 B), split as: scoot bump +151,934,488 B (the
+scoot package closure grows 129,404,608 B -> 402,527,968 B NAR: the single
+0.2.1 build carries the Xwayland server on its `PATH` plus the compiled-in
+xwayland/gpu-scanout code, per scoot #585/#588; most of that closure's
+libraries were already in the image, so the pull sees ~50 MB not ~150 MB)
+and cursor swap -2,399,376 B (vanilla-dmz 3,690,808 B NAR -> mocu 1,113,328 B;
+only Mocu white ships -- `buildEnv` links the package's `out` output, the
+`black` output with Mocu-Black stays out -- and the look's
+`cursor_theme`/`XCURSOR_THEME` now resolve to `Mocu`, verified in the built
+skeleton). L0/L1 diet shape intact at the new rev: L0 279,484,262 B
+(266.5 MiB), L1 293,156,814 B (279.6 MiB); still 53% below the pre-diet pull.
+
 ## Time-to-first-frame
 
 Seconds from `docker run` to the first decodable frame in a headless browser
@@ -47,6 +65,7 @@ start and the first-frame probe:
 | ginger-night | 0.88 s (run -> `capturing` in `docker logs`, 0.2 s poll) | 0.91 s (run -> HTTP 200; canvas painted at +0.6 s in the same session, screenshots `docs/ginger-night-default.png`) |
 | lean baseline rebuilt (this branch) | 0.83 s | 0.84 s (same method, 0.2 s poll) |
 | this head (two first-run columns) | 0.91 s | 0.92 s (screenshot `docs/show-it-off.png`) |
+| this head (scoot v0.2.1, re-measured M2, same method) | 0.91 s | 0.92 s |
 
 One extra foot costs ~0.1 s. Idle, re-measured this round (no viewer, fresh
 container, 30 s settle per state, 3 runs; method below):
@@ -56,7 +75,10 @@ container, 30 s settle per state, 3 runs; method below):
 | lean baseline (1 sh terminal) | 0.00% | 44.9 MiB | _n/a (prior round)_ | _n/a_ |
 | this head, static desktop (no windows) | 0.00% | 41.0-43.5 MiB | 45.1-48.5 MB | 29.0 / 6.4-7.3 MB |
 | this head, bash terminal only | 0.00% | 49.3-52.7 MiB | 53.6-58.1 MB | 34.0 / 10.1-11.0 MB |
+| this head at scoot v0.2.1, bash only (same method) | 0.00% | 52.1 MiB | 53.8 MB | _n/a_ |
+| this head at scoot v0.2.1, static desktop (same method) | 0.00% | 40.1 MiB | 41.9 MB | _n/a_ |
 | this head, first-run (bash + live btop) | 1.20-1.23% | 58.7-59.6 MiB | 62.5-66.3 MB | 37.7-38.6 / 13.8-14.6 MB |
+| this head at scoot v0.2.1 (fresh container, 30 s settle, same method) | 1.5-3.1% | 59.7-62.3 MiB | 61.4 MB | _n/a_ |
 
 Method: per state, after a 30 s settle with no viewer attached, read the
 container cgroup's `memory.current` (total bytes charged) plus
@@ -127,7 +149,7 @@ calls `_refreshCursor()` with the default `none` cursor, and
 
 Fix shipped, in two layers. (1) The image now runs `wayvnc -r`
 (`rootfs/s6/service/wayvnc/run`): with `PAINT_CURSORS` requested, scoot
-re-renders the pointer into each capture, so the real Vanilla-DMZ arrow
+re-renders the pointer into each capture, so the real Mocu arrow
 rides in the frame pixels. Verified live: stable raw-RFB frames at two
 pointer positions are byte-identical without `-r` (modulo the bar's live
 modules) and differ with `-r`; a 30x30 patch at the pointer shows the
@@ -159,7 +181,10 @@ tables in docs/selkies.md. Ginger-night head (scoot `134e39a`): full
 (same apps+fonts as the default tag): full 572,805,816 B (546.3 MiB),
 unpacked 1,882,613,760 B (1.753 GiB) -- +56,974,203 B (+54.3 MiB) pull /
 +129,400,320 B (+123.4 MiB) unpacked, the same delta as the default tag. Default tag this head 243,967,344 B /
-728,530,944 B. Run to
+728,530,944 B. At scoot v0.2.1 (this bump, dev VM build + M2 export):
+full 622,264,070 B (593.4 MiB), unpacked 2,030,473,728 B (1.891 GiB) --
++49,458,254 B (+8.6%) pull / +147,859,968 B unpacked over the show-it-off
+head, the same scoot-bump delta as the default tag. Run to
 stream (full tag): HTTP 200 at 1.05 s (prior round), first client settings
 applied (1280x800 h264enc) at 1.6 s, painted desktop in a persistent
 headless-Chromium connection (screenshots `docs/ginger-night-selkies.png`,
