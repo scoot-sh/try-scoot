@@ -197,6 +197,8 @@ container for unpacked, `docker stats` after a 30 s settle for idle).
 | Selkies full (`:selkies`, ginger-night) | 515,831,613 B (492.0 MiB) | 1,753,213,440 B (1.633 GiB) | 0.19–0.27% / ~119 MiB (no viewer); 27–48% / ~143 MiB (viewer attached, static screen, actively streaming) |
 | Selkies L0 at scoot v0.2.1 | 551,564,522 B (526.0 MiB) | _n/a (pull only)_ | _n/a_ |
 | Selkies full at scoot v0.2.1 | 622,264,070 B (593.4 MiB) | 2,030,473,728 B (1.891 GiB) | _n/a (same desktop as prior round; idle behavior unchanged by the bump)_ |
+| Selkies L0 at scoot v0.3.0 | 551,564,586 B (526.0 MiB) | _n/a (pull only)_ | _n/a (byte-identical to v0.2.1 within 64 B of tarball noise; no desktop in L0)_ |
+| Selkies full at scoot v0.3.0 | 623,185,606 B (594.3 MiB) | _n/a (pull only)_ | _n/a (same desktop as prior round; +0.9 MB over v0.2.1, the same scoot-bump delta as the default tag)_ |
 
 Reviewed baselines: the default tag's pre-#2 numbers were 185,480,055 B
 pull and 593,971,200 B unpacked (revts4, byte-exact); PR #2's scoot bump

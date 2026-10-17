@@ -3,7 +3,7 @@
 # compositor (WAYLAND_DISPLAY names the parent socket; set by the de
 # service), so Selkies captures and drives it directly. No X server runs
 # here: the nested scoot stays Wayland-only ([xwayland] is not enabled, so
-# no Xwayland server is spawned even though scoot v0.2.1 carries the
+# no Xwayland server is spawned even though scoot v0.3.0 carries the
 # support compiled in).
 ulimit -c 0
 export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}"

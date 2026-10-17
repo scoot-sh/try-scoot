@@ -17,6 +17,7 @@ docs/layers.md; the headline before/after is:
 | this head, measured on the branch (lean baseline rebuilt: scoot `722afd2`) | 187,027,379 B (178.4 MiB) | 599,079,936 B (571.3 MiB) |
 | this head (show-it-off: fonts, bar modules, bash+starship, nvim+btop) | 243,967,344 B (232.7 MiB) | 728,530,944 B (694.8 MiB) |
 | this head (scoot `v0.2.1` / `e5b9dd6`: one default build, Mocu cursor) | 294,188,906 B (280.6 MiB) | 880,126,976 B (839.4 MiB) |
+| this head (scoot `v0.3.0` / `3a798fe`: looks as look.toml, look layer under the config) | 295,111,126 B (281.4 MiB) | 884,028,928 B (843.1 MiB) |
 
 Pull +1,394,334 B (+0.75%) for the look: the 926,588 B wallpaper (already
 optimally compressed upstream, so it rides almost byte-for-byte) plus the
@@ -52,6 +53,18 @@ only Mocu white ships -- `buildEnv` links the package's `out` output, the
 skeleton). L0/L1 diet shape intact at the new rev: L0 279,484,262 B
 (266.5 MiB), L1 293,156,814 B (279.6 MiB); still 53% below the pre-diet pull.
 
+scoot v0.3.0 bump delta (dev VM build, aarch64; M2 `docker export` for the
+unpacked number): pull 294,188,906 B -> 295,111,126 B (+922,220 B, +0.3%),
+unpacked 880,126,976 B -> 884,028,928 B (+3,901,952 B, +0.4%). The looks
+machinery (look.toml catalog, `scoot look` verbs, the look layer in scoot
+and scootbar) costs the image ~1 MB of pull: the session still reads the
+one ginger-night look baked in from the flake at build time
+(`nix/ginger-night.nix` now via `nix/lib/look-shipped.nix`; the retired
+`desktop.nix` registry and `theme-look.nix` were the only breakage), and
+no new runtime lands in the container. L0 280,405,055 B (267.4 MiB), L1
+294,079,033 B (280.5 MiB): the diet steps still build the solid-plum path
+in the same shape, +0.9 MB each over v0.2.1.
+
 ## Time-to-first-frame
 
 Seconds from `docker run` to the first decodable frame in a headless browser
@@ -66,6 +79,7 @@ start and the first-frame probe:
 | lean baseline rebuilt (this branch) | 0.83 s | 0.84 s (same method, 0.2 s poll) |
 | this head (two first-run columns) | 0.91 s | 0.92 s (screenshot `docs/show-it-off.png`) |
 | this head (scoot v0.2.1, re-measured M2, same method) | 0.91 s | 0.92 s |
+| this head (scoot v0.3.0, Docker Desktop on M2, same method) | 0.80 s | 0.82 s (run -> HTTP 200; desktop screenshot via `scoot msg` in the same session, `docs/show-it-off.png`) |
 
 One extra foot costs ~0.1 s. Idle, re-measured this round (no viewer, fresh
 container, 30 s settle per state, 3 runs; method below):
