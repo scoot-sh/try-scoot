@@ -41,8 +41,8 @@ FiraCode Nerd Font, the themed launcher and the Mocu cursor (scoot's default
 cursor theme: white at its native 24 px, the same art the compositor draws
 as its built-in fallback). The
 look is read live from the scoot flake input
-(`docs/examples/ginger-night/` plus the `ginger-night` entry in
-`nix/modules/desktop.nix`), so bumping `inputs.scoot` moves the image with
+(`looks/ginger-night/look.toml` through scoot's
+`nix/lib/look-shipped.nix`), so bumping `inputs.scoot` moves the image with
 it; see `nix/ginger-night.nix` for exactly what follows. One deliberate
 divergence: volume/battery modules and launcher buttons need a sound
 server, hardware, or apps that are not in this container, so the bar
