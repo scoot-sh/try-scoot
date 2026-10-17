@@ -3,7 +3,7 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  inputs.scoot.url = "github:scoot-sh/scoot";
+  inputs.scoot.url = "github:scoot-sh/scoot/v0.3.0";
   inputs.scoot.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = {
@@ -27,7 +27,7 @@
       # Mocu is scoot's default cursor theme since v0.2.1 (built from the
       # same vendored SVGs the compositor draws as its built-in fallback;
       # see scoot's nix/mocu-cursor-theme.nix). The look names it via
-      # theme-look.nix, so this package is what provides that name.
+      # nix/lib/look-shipped.nix, so this package is what provides that name.
       mocuPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.mocu-cursor-theme;
       mkImage = pkgs.callPackage ./nix/image.nix {
         inherit scootPkg scootbgPkg scootbarPkg mocuPkg;

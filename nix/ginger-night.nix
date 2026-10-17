@@ -1,27 +1,28 @@
 # Ginger-night look data, read live from the scoot flake input.
 #
-# This is the single place the image reads the look from: the registry in
-# `nix/modules/desktop.nix` (appearance, bar colors, wallpaper mode/fill and
-# the wallpaper store path), the example TOMLs for bar/scoot shape, the
+# This is the single place the image reads the look from: the shipped look
+# in `looks/ginger-night/look.toml` (appearance, bar colors, wallpaper
+# mode/fill and the wallpaper store path, via `nix/lib/look-shipped.nix`;
+# v0.3.0 retired the `nix/modules/desktop.nix` registry and
+# `nix/modules/theme-look.nix`), the example TOMLs for bar/scoot shape, the
 # foot palette file, the fuzzel CLI theme function, and the shared cursor.
 # Bumping the `scoot` flake input moves all of these together; nothing here
 # hand-copies a color except the nvim CursorLine fill (#1A1512, the foot
-# palette's regular0, which the registry does not name).
+# palette's regular0, which the look does not name).
 #
 # Takes `lib` (nixpkgs lib) and the scoot flake (`scootFlake.outPath` is its
 # source tree). Returns the look plus small derivations of it.
 {lib}: {scootFlake}: let
   scootSrc = scootFlake.outPath;
-  desktop = import "${scootSrc}/nix/modules/desktop.nix" {inherit lib;};
-  ginger = desktop.looks.ginger-night;
+  lookShipped = import "${scootSrc}/nix/lib/look-shipped.nix" {inherit lib;};
+  ginger = lookShipped.looks.ginger-night;
   barExample = builtins.fromTOML (builtins.readFile "${scootSrc}/docs/examples/ginger-night/bar.toml");
   scootExample = builtins.fromTOML (builtins.readFile "${scootSrc}/docs/examples/ginger-night/scoot.toml");
   footExampleText = builtins.readFile "${scootSrc}/docs/examples/ginger-night/foot.ini";
   fuzzelThemeFn = import "${scootSrc}/nix/modules/fuzzel-theme.nix" {inherit lib;};
-  themeLook = import "${scootSrc}/nix/modules/theme-look.nix" {inherit lib;};
 in {
   inherit ginger barExample scootExample footExampleText;
-  cursor = themeLook.cursor;
+  cursor = lookShipped.cursor;
   fuzzelFlags = fuzzelThemeFn ginger;
   # The session wallpaper: the look's own file, byte-identical to
   # docs/assets/CatPeeking.png (the maintainer's asset, MIT). 926,588 B,
