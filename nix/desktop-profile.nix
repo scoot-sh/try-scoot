@@ -274,7 +274,8 @@ in {
       "xdg-user-dirs"
       "qt6ct"
       "adwaita-qt"
-    ])) cfg.home.packages;
+    ]))
+  cfg.home.packages;
   # The generated files the image seeds into /defaults.
   scootConfig = fileOf "scoot/config.toml" null;
   barConfig = fileOf "scoot/bar.toml" null;
