@@ -11,7 +11,10 @@
 # palette's regular0, which the look does not name).
 #
 # Takes `lib` (nixpkgs lib) and the scoot flake (`scootFlake.outPath` is its
-# source tree). Returns the look plus small derivations of it.
+# source tree). Returns the look plus small derivations of it. The nvim
+# colors below are only the L0/L1 fallback (no look): the look image seeds
+# the profile's `nvim/colors/scoot-look.lua` + `nvim/plugin/scoot-look.lua`
+# instead (see nix/desktop-profile.nix).
 {lib}: {scootFlake}: let
   scootSrc = scootFlake.outPath;
   lookShipped = import "${scootSrc}/nix/lib/look-shipped.nix" {inherit lib;};
@@ -40,9 +43,10 @@ in {
   starshipText = builtins.readFile ginger.appFiles.starship;
   btopConfText = builtins.readFile ginger.appFiles.btopConf;
   btopThemeText = builtins.readFile ginger.appFiles.btopTheme;
-  # Neovim colors, generated from the look's registry palette (bar colors):
-  # near-black field, cream text, ginger accent, amber hover, dim separators,
-  # ember errors. No plugins, no network; truecolor for foot.
+  # Neovim fallback for the L0/L1 diet steps (no look): generated from the
+  # look's registry palette (bar colors) so the lean images still carry
+  # ginger-night hues. The look image does NOT use this: it seeds the
+  # profile's nvim leaf (colorscheme + plugin select) instead.
   nvimInit = ''
     " try-scoot nvim defaults (MIT): ginger-night palette, no plugins.
     set termguicolors

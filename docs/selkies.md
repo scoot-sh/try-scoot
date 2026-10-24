@@ -200,6 +200,7 @@ container for unpacked, `docker stats` after a 30 s settle for idle).
 | Selkies L0 at scoot v0.3.0 | 551,564,586 B (526.0 MiB) | _n/a (pull only)_ | _n/a (byte-identical to v0.2.1 within 64 B of tarball noise; no desktop in L0)_ |
 | Selkies full at scoot v0.3.0 | 623,185,606 B (594.3 MiB) | _n/a (pull only)_ | _n/a (same desktop as prior round; +0.9 MB over v0.2.1, the same scoot-bump delta as the default tag)_ |
 | Selkies full at scoot v0.6.0 | 624,003,860 B (595.1 MiB) | _n/a (pull only)_ | _n/a (desktop profile, same source as default; +0.8 MB over v0.3.0)_ |
+| Selkies full at scoot v0.6.2 | _n/a (same profile change as default: nvim default editor; CI builds it, not re-measured here)_ | _n/a_ | _n/a (same desktop as default tag; layer delta bounded by the default's +7 KB)_ |
 
 Reviewed baselines: the default tag's pre-#2 numbers were 185,480,055 B
 pull and 593,971,200 B unpacked (revts4, byte-exact); PR #2's scoot bump

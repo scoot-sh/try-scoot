@@ -19,6 +19,7 @@ docs/layers.md; the headline before/after is:
 | this head (scoot `v0.2.1` / `e5b9dd6`: one default build, Mocu cursor) | 294,188,906 B (280.6 MiB) | 880,126,976 B (839.4 MiB) |
 | this head (scoot `v0.3.0` / `3a798fe`: looks as look.toml, look layer under the config) | 295,111,126 B (281.4 MiB) | 884,028,928 B (843.1 MiB) |
 | this head (scoot `v0.6.0` / `0f57082`: desktop profile, lock off) | 295,929,188 B (282.2 MiB) | 883,683,840 B (842.7 MiB) |
+| this head (scoot `v0.6.2` / `8cb6ba2`: nvim default editor via profile) | 295,936,638 B (282.2 MiB) | 883,683,840 B (842.7 MiB, re-export blocked by disk; layer delta +7,450 B implies unpacked delta of the same order — text files only) |
 
 Pull +1,394,334 B (+0.75%) for the look: the 926,588 B wallpaper (already
 optimally compressed upstream, so it rides almost byte-for-byte) plus the
