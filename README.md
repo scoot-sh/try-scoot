@@ -11,12 +11,12 @@ The smallest fast way to try scoot: a lightweight desktop running scoot
 v0.6.0 from the scoot flake, in your browser. No GPU needed (scoot's `auto`
 renderer resolves to the CPU tier here; software capture); no client install.
 
-- **Tiny:** 281.4 MiB pull, 843.1 MiB unpacked (`docker export`), with a
+- **Tiny:** 282.2 MiB pull, 842.7 MiB unpacked (`docker export`), with a
   terminal, launcher, bar, wallpaper, bash + starship, neovim and btop
-  inside, on scoot v0.3.0. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
+  inside, on scoot v0.6.0. The pre-diet image was 596.0 MiB pull / 2.013 GiB unpacked; the
   show-it-off apps and fonts add ~54 MiB pull over the lean baseline and the
-  scoot v0.3.0 bump adds ~51 MiB more (the Xwayland server runtime now carried
-  in scoot's own closure), itemized in `docs/layers.md`.
+  scoot v0.6.0 bump + desktop profile (notifications, launcher) keeps it
+  at +0.8 MB pull / -0.3 MB unpacked over v0.3.0, itemized in `docs/layers.md`.
 - **Fast:** `docker run` to capturing in 0.91 s, painted desktop in the
   browser at 0.92 s (Asahi M2, measured; method in `docs/benchmark.md`).
   A static desktop idles at 0.00% CPU (~40 MiB); a bash terminal alone
@@ -194,9 +194,9 @@ docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/scoot-sh/try-scoot:selkies
 docker logs <container>  # generated password (use the last GENERATED line); open http://localhost:8080/
 ```
 
-Trade-offs, measured (see docs/selkies.md for method): ~594 MiB pull and
-~1.89 GiB unpacked (vs ~281 MiB / ~843 MiB for this tag: the same
-apps+fonts delta plus the same scoot v0.3.0 bump), 0.20% / ~141 MiB idle without a viewer and 27-48% /
+Trade-offs, measured (see docs/selkies.md for method): ~595 MiB pull and
+~1.89 GiB unpacked (vs ~282 MiB / ~843 MiB for this tag: the same
+apps+fonts delta plus the same scoot v0.6.0 bump), 0.20% / ~141 MiB idle without a viewer and 27-48% /
 ~143 MiB with
 a viewer attached and actively streaming (software x264 at 60 fps -- the
 expected cost; viewer-attached figures are the prior round, the live btop

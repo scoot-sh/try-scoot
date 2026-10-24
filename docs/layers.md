@@ -67,18 +67,22 @@ drop without forking scoot. Partly offset by the cursor swap
 (vanilla-dmz -> Mocu, -2,399,376 B NAR). L0 279,484,262 B, L1 293,156,814 B:
 the diet steps still build the solid-plum path in the same shape.
 
-## scoot v0.3.0 bump (this round)
+## scoot v0.6.0 bump + desktop profile (this round)
 
-Pull 294,188,906 B -> 295,111,126 B (+922,220 B, +0.3%), unpacked
-880,126,976 B -> 884,028,928 B (+3,901,952 B, +0.4%); full numbers in
-docs/benchmark.md. The only image-side change is where the look is read
-from: `nix/ginger-night.nix` follows the v0.3.0 retirement of the
-`desktop.nix` shipped-look registry and `theme-look.nix` and reads
-`looks/ginger-night/look.toml` through `nix/lib/look-shipped.nix`
-(cursor from `look-shipped.cursor`). Diet step 1 still holds at the new
-rev (layer 57 carries `mesa-libgbm` only -- wayvnc's `libgbm.so.1` --
-foot links no GL; the Xwayland runtime stays, as published). No new
-packages, no new layers of note.
+Pull 295,111,126 B -> 295,929,188 B (+818,062 B, +0.3%), unpacked
+884,028,928 B -> 883,683,840 B (-345,088 B, -0.0%); full numbers in
+docs/benchmark.md. The image now evaluates the real
+`programs.scoot.desktop` profile at build time (home-manager follows
+nixpkgs; scoot flake `homeModules`, ginger-night look, lock/idle off;
+see `nix/desktop-profile.nix`): binds/autostart/virtual_input, bar,
+foot, launcher, wallpaper and cursor follow the profile, with
+container overrides (no systemd/hardware services, static look values
+since the container runs s6). Launcher via fuzzel (static theme
+flags), notifications via scootnotify (daemon supervised in
+`session.sh`). No swayidle/swaylock in the closure; `scoot msg locked`
+is false. Diet step 1 still holds (layer carries `mesa-libgbm` only).
+Perl/qt6ct/adwaita-qt/man-db filtered out of the profile closure to
+keep the image lean.
 
 Why FiraCode Nerd Font ships whole instead of a subset: a Nerd-Font subset would break the look's icon coverage on the next scoot bump (any new glyph the look adopts would need re-subsetting, and foot, starship and the bar each draw from different corners of the font), so the image carries the font package as nixpkgs ships it -- one output, all weights -- and follows the look on bump rather than pinning a glyph list that silently rots.
 
