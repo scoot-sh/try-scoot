@@ -3,13 +3,17 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  inputs.scoot.url = "github:scoot-sh/scoot/v0.3.0";
+  inputs.scoot.url = "github:scoot-sh/scoot/v0.6.0";
   inputs.scoot.inputs.nixpkgs.follows = "nixpkgs";
+
+  inputs.home-manager.url = "github:nix-community/home-manager";
+  inputs.home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = {
     self,
     nixpkgs,
     scoot,
+    home-manager,
   }: let
     systems = ["x86_64-linux" "aarch64-linux"];
     lib = nixpkgs.lib;
@@ -24,14 +28,17 @@
       scootPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scoot;
       scootbgPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootbg;
       scootbarPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootbar;
+      scootlaunchPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootlaunch;
+      scootnotifyPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.scootnotify;
       # Mocu is scoot's default cursor theme since v0.2.1 (built from the
       # same vendored SVGs the compositor draws as its built-in fallback;
       # see scoot's nix/mocu-cursor-theme.nix). The look names it via
       # nix/lib/look-shipped.nix, so this package is what provides that name.
       mocuPkg = scoot.packages.${pkgs.stdenv.hostPlatform.system}.mocu-cursor-theme;
       mkImage = pkgs.callPackage ./nix/image.nix {
-        inherit scootPkg scootbgPkg scootbarPkg mocuPkg;
+        inherit scootPkg scootbgPkg scootbarPkg scootlaunchPkg scootnotifyPkg mocuPkg;
         scootFlake = scoot;
+        homeManagerFlake = home-manager;
       };
       image-l0 = mkImage {
         name = "try-scoot-l0";
@@ -60,8 +67,9 @@
       selkiesStack = pkgs.callPackage ./nix/selkies-stack.nix {};
       selkies = selkiesStack.selkies;
       mkSelkiesImage = pkgs.callPackage ./nix/image-selkies.nix {
-        inherit scootPkg scootbgPkg scootbarPkg mocuPkg selkiesStack;
+        inherit scootPkg scootbgPkg scootbarPkg scootlaunchPkg scootnotifyPkg mocuPkg selkiesStack;
         scootFlake = scoot;
+        homeManagerFlake = home-manager;
       };
       image-selkies-l0 = mkSelkiesImage {
         name = "try-scoot-selkies-l0";
