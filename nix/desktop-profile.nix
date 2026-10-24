@@ -259,23 +259,22 @@ in {
   # toolkits with no apps in the image (qt6ct, adwaita-qt: no GTK/Qt
   # apps ship here). xdg-utils (perl) stays out the same way
   # wl-clipboard does: nothing in the container reads it.
-  packages = builtins.filter (p:
-    let
-      n = p.pname or p.name or "";
-    in
-      !(lib.elem n [
-        "man-db"
-        "home-configuration-reference-manpage"
-        "hm-session-vars.sh"
-        "dummy-xdg-mime-dirs1"
-        "dummy-xdg-mime-dirs2"
-        "dummy-fc-dir1"
-        "dummy-fc-dir2"
-        "xdg-utils"
-        "xdg-user-dirs"
-        "qt6ct"
-        "adwaita-qt"
-      ])) cfg.home.packages;
+  packages = builtins.filter (p: let
+    n = p.pname or p.name or "";
+  in
+    !(lib.elem n [
+      "man-db"
+      "home-configuration-reference-manpage"
+      "hm-session-vars.sh"
+      "dummy-xdg-mime-dirs1"
+      "dummy-xdg-mime-dirs2"
+      "dummy-fc-dir1"
+      "dummy-fc-dir2"
+      "xdg-utils"
+      "xdg-user-dirs"
+      "qt6ct"
+      "adwaita-qt"
+    ])) cfg.home.packages;
   # The generated files the image seeds into /defaults.
   scootConfig = fileOf "scoot/config.toml" null;
   barConfig = fileOf "scoot/bar.toml" null;
