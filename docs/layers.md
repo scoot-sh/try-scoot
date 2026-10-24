@@ -84,6 +84,28 @@ is false. Diet step 1 still holds (layer carries `mesa-libgbm` only).
 Perl/qt6ct/adwaita-qt/man-db filtered out of the profile closure to
 keep the image lean.
 
+## scoot v0.6.2 bump + nvim default editor (this round)
+
+Pull 295,929,188 B -> 295,936,638 B (+7,450 B, +0.003%), unpacked
+883,683,840 B -> ~same (+KBs, text files only; `docker export` re-measure
+blocked by disk on the M2, see report — the layer delta bounds it); full
+numbers in docs/benchmark.md. The profile now sets
+`programs.scoot.desktop.apps.editor.default = "nvim"` (package overridden
+to `neovim-unwrapped`: the profile default is wrapped neovim with
+perl/python providers, ~190 MB NAR for nothing a plugin-free config can
+use; the image already ships unwrapped, so no new closure weight) and
+`desktop.theme.targets.editor.nvim.enable = true`, so nvim is the default
+editor: `EDITOR`/`VISUAL` via the profile, `text/plain` (+ `text/*`) via
+its mimeapps list + terminal desktop entry (`foot -e nvim`), colorscheme
+following ginger-night via `nvim/colors/scoot-look.lua` +
+`nvim/plugin/scoot-look.lua`. The hand-written nvim colors are gone when
+the look is on: `init.vim` is options only, colors arrive via the profile
+leaf (L0/L1 keep the hand-written fallback: no look). `rootfs/init` seeds
+the new files (`nvim/colors`, `nvim/plugin`, `mimeapps.list`,
+`scoot-editor.desktop`). First-run columns (`foot`, `foot btop` via
+autostart) unchanged; `scoot msg locked` still false. Diet step 1 still
+holds; `xdg-utils`/man-db/qt6ct still filtered out.
+
 Why FiraCode Nerd Font ships whole instead of a subset: a Nerd-Font subset would break the look's icon coverage on the next scoot bump (any new glyph the look adopts would need re-subsetting, and foot, starship and the bar each draw from different corners of the font), so the image carries the font package as nixpkgs ships it -- one output, all weights -- and follows the look on bump rather than pinning a glyph list that silently rots.
 
 Method: root-env closure via `nix path-info --closure-size`; tarball bytes
