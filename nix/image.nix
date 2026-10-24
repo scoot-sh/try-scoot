@@ -454,7 +454,33 @@
         cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
       ''
     }
-    cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
+    ${
+      if withLook
+      then ''
+        # nvim from the desktop profile (scoot v0.6.1+): the look's
+        # colorscheme + plugin select replace the hand-written colors.
+        # Minimal init (options only, no colors): the colorscheme arrives
+        # via the profile's colors/plugin files seeded below.
+        cp ${desktopProfile.nvimColors} $out/defaults/nvim-colors.lua
+        cp ${desktopProfile.nvimPlugin} $out/defaults/nvim-plugin.lua
+        cat > $out/defaults/nvim-init.vim <<'VIM'
+        " try-scoot nvim defaults (MIT): options only, no colors.
+        " Colors follow the ginger-night look via nvim/colors/scoot-look.lua
+        " + nvim/plugin/scoot-look.lua from the desktop profile.
+        set termguicolors
+        set background=dark
+        syntax on
+        set number
+        set cursorline
+        set showmatch
+        VIM
+        cp ${desktopProfile.mimeApps} $out/defaults/mimeapps.list
+        cp ${desktopProfile.editorDesktopEntry} $out/defaults/scoot-editor.desktop
+      ''
+      else ''
+        cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
+      ''
+    }
     ${
       if withLook
       then ''

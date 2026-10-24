@@ -142,11 +142,23 @@
         programs.scoot.desktop.apps.fileManager.enable = false;
 
         # No GTK/Qt theming in the container (no GTK/Qt apps ship
-        # here; foot/btop/nvim are terminal). Keeps qt6ct/adwaita-qt
-        # out of the closure; foot/starship/btop theming stays on via
-        # the theme module's terminal/shell/monitor leaves.
+        # here; foot/btop are terminal, nvim is terminal too but its
+        # colorscheme follows the look). Keeps qt6ct/adwaita-qt
+        # out of the closure; foot/starship/btop/nvim theming stays on
+        # via the theme module's terminal/shell/monitor/editor leaves.
         programs.scoot.desktop.theme.targets.gtk.enable = false;
         programs.scoot.desktop.theme.targets.qt.enable = false;
+
+        # nvim is the image's default editor (EDITOR/VISUAL, text/plain
+        # via the profile, colorscheme following ginger-night): link the
+        # look's colorscheme and select it (no programs.neovim in the
+        # container, so the selection lands).
+        programs.scoot.desktop.theme.targets.editor.nvim.enable = true;
+        programs.scoot.desktop.apps.editor.default = "nvim";
+        # Keep the image lean: the profile default is wrapped neovim
+        # (perl/python providers, ~190 MB NAR for nothing a plugin-free
+        # config can use); the image already ships neovim-unwrapped.
+        programs.scoot.desktop.apps.editor.package = pkgs.neovim-unwrapped;
 
         # Launcher via fuzzel (not the profile's default scootlaunch):
         # fuzzel carries the look's colors as CLI flags (static,
@@ -235,6 +247,17 @@
     else if entry.text or null != null
     then pkgs.writeText name entry.text
     else fallback;
+  # Helper for xdg.dataFile entries (the editor desktop entry).
+  dataFileOf = name: fallback: let
+    entry = cfg.xdg.dataFile.${name} or null;
+  in
+    if entry == null
+    then fallback
+    else if entry.source or null != null
+    then entry.source
+    else if entry.text or null != null
+    then pkgs.writeText (baseNameOf name) entry.text
+    else fallback;
   # btop theme lives under btop/themes/<name>; find it.
   btopThemeName = let
     names = builtins.filter (n: lib.hasPrefix "btop/themes/" n) (builtins.attrNames cfg.xdg.configFile);
@@ -292,6 +315,15 @@ in {
     else baseNameOf btopThemeName;
   launchConfig = fileOf "scoot/launch.toml" null;
   notifyConfig = fileOf "scoot/notify.toml" null;
+  # nvim look leaf from the profile (v0.6.1+): the colorscheme link
+  # (always with the editor target on) and the plugin select (with
+  # targets.editor.nvim.enable). Replaces the hand-written init colors.
+  nvimColors = fileOf "nvim/colors/scoot-look.lua" null;
+  nvimPlugin = fileOf "nvim/plugin/scoot-look.lua" null;
+  # text/plain association via the profile (editor.default): mimeapps
+  # list + terminal desktop entry running foot -e <editor>.
+  mimeApps = fileOf "mimeapps.list" null;
+  editorDesktopEntry = dataFileOf "applications/scoot-editor.desktop" null;
   # Wallpaper file from the look (store path, not generated).
   wallpaperFile = scootFlake.outPath + "/docs/examples/ginger-night/wallpaper.png";
   # For assertions: no idle/lock packages in the closure.

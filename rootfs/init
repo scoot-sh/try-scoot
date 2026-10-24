@@ -49,6 +49,23 @@ seed /defaults/bashrc "$HOME/.bashrc"
 seed /defaults/bash_profile "$HOME/.bash_profile"
 seed /defaults/starship.toml "$HOME/.config/starship.toml"
 seed /defaults/nvim-init.vim "$HOME/.config/nvim/init.vim"
+# nvim look leaf from the desktop profile (scoot v0.6.1+): colorscheme +
+# plugin select (replaces the hand-written colors; init.vim above is
+# options only when the look is on).
+if [ -f /defaults/nvim-colors.lua ]; then
+  seed /defaults/nvim-colors.lua "$HOME/.config/nvim/colors/scoot-look.lua"
+fi
+if [ -f /defaults/nvim-plugin.lua ]; then
+  seed /defaults/nvim-plugin.lua "$HOME/.config/nvim/plugin/scoot-look.lua"
+fi
+# text/plain association via the profile (editor.default): mimeapps list +
+# terminal desktop entry running foot -e nvim.
+if [ -f /defaults/mimeapps.list ]; then
+  seed /defaults/mimeapps.list "$HOME/.config/mimeapps.list"
+fi
+if [ -f /defaults/scoot-editor.desktop ]; then
+  seed /defaults/scoot-editor.desktop "$HOME/.local/share/applications/scoot-editor.desktop"
+fi
 seed /defaults/btop.conf "$HOME/.config/btop/btop.conf"
 seed /defaults/btop-theme.theme "$HOME/.config/btop/themes/ginger-night.theme"
 # Notification daemon config from the desktop profile (scootnotify);
