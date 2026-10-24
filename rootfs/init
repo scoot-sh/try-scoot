@@ -51,6 +51,15 @@ seed /defaults/starship.toml "$HOME/.config/starship.toml"
 seed /defaults/nvim-init.vim "$HOME/.config/nvim/init.vim"
 seed /defaults/btop.conf "$HOME/.config/btop/btop.conf"
 seed /defaults/btop-theme.theme "$HOME/.config/btop/themes/ginger-night.theme"
+# Notification daemon config from the desktop profile (scootnotify);
+# launcher config if the profile generated one (scootlaunch, unused
+# with the fuzzel daemon but harmless to seed).
+if [ -f /defaults/notify.toml ]; then
+  seed /defaults/notify.toml "$HOME/.config/scoot/notify.toml"
+fi
+if [ -f /defaults/launch.toml ]; then
+  seed /defaults/launch.toml "$HOME/.config/scoot/launch.toml"
+fi
 chown -R abc:abc /config/.config 2>/dev/null || true
 chown abc:abc /config/.bashrc /config/.bash_profile 2>/dev/null || true
 

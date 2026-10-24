@@ -8,7 +8,7 @@ docker run --rm -p 127.0.0.1:6080:6080 ghcr.io/scoot-sh/try-scoot
 ![scoot's ginger-night desktop in try-scoot: a live btop column beside a welcome terminal, the floating bar with workspaces left, clock centered and window title, load, cpu and network on the right, the cat-peeking wallpaper at the right](docs/show-it-off.png)
 
 The smallest fast way to try scoot: a lightweight desktop running scoot
-v0.3.0 from the scoot flake, in your browser. No GPU needed (scoot's `auto`
+v0.6.0 from the scoot flake, in your browser. No GPU needed (scoot's `auto`
 renderer resolves to the CPU tier here; software capture); no client install.
 
 - **Tiny:** 281.4 MiB pull, 843.1 MiB unpacked (`docker export`), with a
@@ -246,9 +246,14 @@ secret, which is deliberately not wired into CI here.
 scoot (`github:scoot-sh/scoot`) ships the compositor, `scootbar`, and
 `scootbg`; this image consumes that flake (`inputs.scoot`, nixpkgs followed
 so the image carries one stack) and runs headless scoot directly, captured
-by wayvnc. The desktop profile's shape (bar, wallpaper, launcher, terminal)
-mirrors `programs.scoot.desktop`, but the container does not run NixOS
-modules: it seeds plain config files.
+by wayvnc. The desktop comes from the real `programs.scoot.desktop` profile
+(evaluated at build time via home-manager, ginger-night look, lock/idle off;
+see `nix/desktop-profile.nix`): binds/autostart/virtual_input, bar, foot,
+launcher, wallpaper and cursor follow the profile, with container-only
+overrides (no systemd/hardware services, static look values since the
+container runs s6, not home-manager activation). The container does not run
+NixOS modules: it seeds plain config files from the evaluated profile into
+`/defaults`.
 
 `yackey-labs/nixos-webtop` is the inspiration, not the source: it taught us
 the pieces (flake-built images, headless scoot + wayvnc + noVNC, input and
