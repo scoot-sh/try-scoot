@@ -23,9 +23,12 @@
   scootPkg,
   scootbgPkg,
   scootbarPkg,
+  scootlaunchPkg,
+  scootnotifyPkg,
   mocuPkg,
   selkiesStack,
   scootFlake,
+  homeManagerFlake,
 }: {
   name,
   tag ? "latest",
@@ -37,6 +40,23 @@
   tinyLocales = pkgs.glibcLocales.override {allLocales = false;};
 
   ginger = import ./ginger-night.nix {inherit lib;} {inherit scootFlake;};
+
+  # Same desktop profile as the default image, but without the
+  # virtual-keyboard binds flag (Selkies delivers chords through the
+  # seat keymap; the flag is a no-op there).
+  desktopProfile =
+    import ./desktop-profile.nix {inherit lib pkgs scootFlake homeManagerFlake;}
+    {withVirtualBinds = false;};
+
+  # Same show_disks fix as the default image: no block devices here.
+  btopConfProfileFixed = runCommand "btop-profile.conf" {} ''
+    cat ${desktopProfile.btopConfig} > $out
+    if grep -q '^show_disks' $out; then
+      sed -i 's/^show_disks.*/show_disks = False/' $out
+    else
+      echo 'show_disks = False' >> $out
+    fi
+  '';
 
   basePackages = with pkgs;
     [
@@ -93,7 +113,9 @@
     ]
     ++ lib.optionals withDesktop [fuzzel scootbarPkg scootbgPkg scootPkg]
     # Mocu, scoot's default cursor theme since v0.2.1 (see nix/image.nix).
-    ++ lib.optionals (withDesktop && withLook) [mocuPkg];
+    ++ lib.optionals (withDesktop && withLook) [mocuPkg]
+    # Desktop profile packages (binds carry absolute store paths).
+    ++ lib.optionals (withDesktop && withLook) desktopProfile.packages;
 
   rootEnv = buildEnv {
     name = "${name}-root-env";
@@ -109,7 +131,7 @@
 
   wallpaperPng =
     if withLook
-    then ginger.wallpaperFile
+    then desktopProfile.wallpaperFile
     else
       runCommand "try-scoot-wallpaper.png"
       {nativeBuildInputs = [pkgs.python3];} ''
@@ -132,59 +154,7 @@
 
   scootConfig =
     if withLook
-    then
-      pkgs.writeText "scoot-config.toml" ''
-        [layout]
-        default_column_width = 1
-        gap = ${toString ginger.scootExample.layout.gap}
-
-        [appearance]
-        background_color = "${ginger.ginger.appearance.background_color}"
-        corner_radius = ${toString ginger.scootExample.appearance.corner_radius}
-        focus_ring_width = ${toString ginger.scootExample.appearance.focus_ring_width}
-        focus_ring_inactive_width = ${toString ginger.scootExample.appearance.focus_ring_inactive_width}
-        focus_ring_active_color = "${ginger.ginger.appearance.focus_ring_active_color}"
-        focus_ring_inactive_color = "${ginger.ginger.appearance.focus_ring_inactive_color}"
-        cursor_theme = "${ginger.cursor.name}"
-        cursor_size = ${toString ginger.cursor.size}
-        prefer_no_csd = true
-
-        [output]
-        [virtual_input]
-        enabled = true
-        # NOTE: deliberately no `binds = true` here, unlike nix/image.nix.
-        # That flag governs virtual-keyboard input only; the Selkies path
-        # delivers remote chords through the compositor seat keymap (real seat
-        # input to the nested scoot, not virtual-keyboard), so chords fire
-        # regardless and the flag would be a no-op. See docs/selkies.md.
-
-        [wallpaper]
-        ${lib.optionalString withDesktop ''          image = "/defaults/wallpaper.png"
-                mode = "${ginger.ginger.wallpaper.mode}"
-                fill = "${ginger.ginger.wallpaper.fill}"''}
-
-        [autostart]
-        ${lib.optionalString withDesktop ''          commands = [
-                  "spawn scoot-bar-look",
-                  # First-run columns, same as the default image.
-                  "spawn foot",
-                  "spawn foot btop",
-                ]''}
-
-        [binds]
-        "alt+Return" = "spawn foot"
-        "super+Return" = "spawn foot"
-        "alt+t" = "spawn foot"
-        "super+t" = "spawn foot"
-        "alt+d" = "spawn fuzzel-look"
-        "super+d" = "spawn fuzzel-look"
-        "alt+q" = "close"
-        "super+q" = "close"
-        "alt+h" = "focus-column left"
-        "alt+l" = "focus-column right"
-        "super+h" = "focus-column left"
-        "super+l" = "focus-column right"
-      ''
+    then desktopProfile.scootConfig
     else
       pkgs.writeText "scoot-config.toml" ''
         [layout]
@@ -229,63 +199,7 @@
 
   barConfig =
     if withLook
-    then
-      pkgs.writeText "scoot-bar.toml" ''
-        # Ginger-night bar, container subset (same as the default image).
-        left = ["workspaces", "window-title"]
-        center = ["clock"]
-        right = ["load", "cpu", "network"]
-
-        [bar]
-        height = ${toString ginger.barExample.bar.height}
-        margin = "${ginger.barExample.bar.margin}"
-        radius = ${toString ginger.barExample.bar.radius}
-        opacity = ${toString ginger.barExample.bar.opacity}
-        font-size = ${toString ginger.barExample.bar.font-size}
-        padding = ${toString ginger.barExample.bar.padding}
-        spacing = ${toString ginger.barExample.bar.spacing}
-        separator = ${toString ginger.barExample.bar.separator}
-
-        [colors]
-        background = "${ginger.ginger.barColors.background}"
-        foreground = "${ginger.ginger.barColors.foreground}"
-        accent = "${ginger.ginger.barColors.accent}"
-        hover = "${ginger.ginger.barColors.hover}"
-        dim = "${ginger.ginger.barColors.dim}"
-        urgent = "${ginger.ginger.barColors.urgent}"
-
-        [workspaces]
-        pill-shape = "${ginger.barExample.workspaces.pill-shape}"
-        pill-inset = ${toString ginger.barExample.workspaces.pill-inset}
-        item-gap = ${toString ginger.barExample.workspaces.item-gap}
-        margin = ${toString ginger.barExample.workspaces.margin}
-        disc = ${lib.boolToString ginger.barExample.workspaces.disc}
-        inactive-color = "${ginger.barExample.workspaces.inactive-color}"
-
-        [window-title]
-        icon = "${ginger.barExample."window-title".icon}"
-        show-app-id = ${lib.boolToString ginger.barExample."window-title".show-app-id}
-        max-width = ${toString ginger.barExample."window-title".max-width}
-
-        [clock]
-        format = "${ginger.barExample.clock.format}"
-        icon = "${ginger.barExample.clock.icon}"
-
-        [exec.load]
-        command = ["/usr/local/bin/scoot-bar-load"]
-        icon = "${ginger.barExample.exec.load.icon}"
-        placeholder = "..."
-
-        [exec.cpu]
-        command = ["/usr/local/bin/scoot-bar-cpu"]
-        icon = "${ginger.barExample.exec.cpu.icon}"
-        placeholder = "..."
-
-        [network]
-        icon-wifi = [${lib.concatMapStringsSep ", " (g: "\"${g}\"") ginger.barExample.network.icon-wifi}]
-        icon-ethernet = "${ginger.barExample.network.icon-ethernet}"
-        show-text = ${lib.boolToString ginger.barExample.network.show-text}
-      ''
+    then desktopProfile.barConfig
     else
       pkgs.writeText "scoot-bar.toml" ''
         left = ["workspaces"]
@@ -306,7 +220,7 @@
 
   footConfig =
     if withLook
-    then pkgs.writeText "foot.ini" ginger.footIni
+    then desktopProfile.footConfig
     else
       pkgs.writeText "foot.ini" ''
         font = DejaVu Sans Mono:size=11
@@ -444,10 +358,29 @@
     cp ${barConfig} $out/defaults/bar.toml
     cp ${footConfig} $out/defaults/foot.ini
     cp ${fuzzelConfig} $out/defaults/fuzzel.ini
-    cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
+    ${
+      if withLook
+      then ''
+        cp ${desktopProfile.starshipConfig} $out/defaults/starship.toml
+        cp ${desktopProfile.notifyConfig} $out/defaults/notify.toml
+        ${lib.optionalString (desktopProfile.launchConfig != null) "cp ${desktopProfile.launchConfig} $out/defaults/launch.toml"}
+      ''
+      else ''
+        cp ${pkgs.writeText "starship.toml" ginger.starshipText} $out/defaults/starship.toml
+      ''
+    }
     cp ${pkgs.writeText "init.vim" ginger.nvimInit} $out/defaults/nvim-init.vim
-    cp ${pkgs.writeText "btop.conf" ginger.btopConfText} $out/defaults/btop.conf
-    cp ${pkgs.writeText "ginger-night.theme" ginger.btopThemeText} $out/defaults/btop-theme.theme
+    ${
+      if withLook
+      then ''
+        cp ${btopConfProfileFixed} $out/defaults/btop.conf
+        cp ${desktopProfile.btopTheme} $out/defaults/btop-theme.theme
+      ''
+      else ''
+        cp ${pkgs.writeText "btop.conf" ginger.btopConfText} $out/defaults/btop.conf
+        cp ${pkgs.writeText "ginger-night.theme" ginger.btopThemeText} $out/defaults/btop-theme.theme
+      ''
+    }
     mkdir -p $out/usr/local/bin
     ${lib.optionalString withDesktop ''
       cp ${barLookWrapper}/bin/scoot-bar-look $out/usr/local/bin/scoot-bar-look

@@ -16,5 +16,15 @@ while true; do
       scoot-bar-look >> "$LOG" 2>&1 &
     fi
   fi
+  # Notification daemon from the desktop profile (scootnotify): runs
+  # headless on the session bus, popups on the overlay layer. No
+  # systemd user manager in the container, so supervise it here like
+  # the bar. If it does not start (missing bus/wayland), binds fail
+  # quietly and the desktop still comes up.
+  if command -v scootnotify >/dev/null 2>&1; then
+    if ! pgrep -x scootnotify >/dev/null 2>&1; then
+      scootnotify daemon >> "$LOG" 2>&1 &
+    fi
+  fi
   sleep 10
 done
