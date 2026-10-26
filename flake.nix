@@ -3,7 +3,7 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  inputs.scoot.url = "github:scoot-sh/scoot/v0.6.4";
+  inputs.scoot.url = "github:scoot-sh/scoot/v0.6.5";
   inputs.scoot.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.home-manager.url = "github:nix-community/home-manager";
